@@ -8,18 +8,12 @@ function fetchPage() {
 
   return new Promise((resolve, reject) => {
 
-
-    console.log("ローチケ取得開始");
-
-
     const req = https.get(
       url,
       {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-          "Accept":
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "Accept-Language":
             "ja-JP,ja;q=0.9"
         }
@@ -27,33 +21,21 @@ function fetchPage() {
 
       (res) => {
 
-
-        console.log(
-          "Status:",
-          res.statusCode
-        );
-
-
         let html = "";
-
 
         res.on(
           "data",
-          (chunk) => {
+          chunk => {
             html += chunk;
           }
         );
 
-
         res.on(
           "end",
           () => {
-
             resolve(html);
-
           }
         );
-
 
       }
     );
@@ -77,11 +59,7 @@ function fetchPage() {
 
     req.on(
       "error",
-      (err) => {
-
-        reject(err);
-
-      }
+      reject
     );
 
 
@@ -91,110 +69,215 @@ function fetchPage() {
 
 
 
-async function main() {
+function extractJsonLD(html) {
+
+  const regex =
+    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
 
 
-  try {
+  let match;
+
+  let events = [];
 
 
-    const html =
-      await fetchPage();
+  while(
+    (match = regex.exec(html))
+  ){
+
+    try{
+
+      const data =
+        JSON.parse(match[1]);
 
 
-    console.log(
-      "取得成功"
-    );
+      if(
+        Array.isArray(data)
+      ){
 
+        events.push(...data);
 
-    console.log(
-      "文字数:",
-      html.length
-    );
+      }
+      else{
 
-
-
-    const targets = [
-      "千葉県",
-      "ＬａＬａ",
-      "LaLa",
-      "TOKYO",
-      "arena"
-    ];
-
-
-
-    for(
-      const target of targets
-    ) {
-
-
-      console.log(
-        "\n===================="
-      );
-
-
-      console.log(
-        "検索:",
-        target
-      );
-
-
-      const index =
-        html.indexOf(target);
-
-
-
-      console.log(
-        "位置:",
-        index
-      );
-
-
-
-      if(index !== -1) {
-
-
-        console.log(
-          html.substring(
-            Math.max(0,index-800),
-            index+1500
-          )
-        );
-
-
-      } else {
-
-
-        console.log(
-          "見つかりません"
-        );
-
+        events.push(data);
 
       }
 
 
     }
+    catch(e){
 
-
-  }
-  catch(error) {
-
-
-    console.log(
-      "取得エラー:"
-    );
-
-
-    console.log(
-      error.message
-    );
-
+    }
 
   }
+
+
+  return events;
+
+}
+
+
+
+function convertStatus(offer) {
+
+
+  const now =
+    new Date();
+
+
+  const start =
+    offer.validFrom
+      ? new Date(offer.validFrom)
+      : null;
+
+
+
+  if(
+    start &&
+    now < start
+  ){
+
+    return "発売前";
+
+  }
+
+
+
+  if(
+    offer.availability &&
+    offer.availability.includes("SoldOut")
+  ){
+
+    return "予定枚数終了";
+
+  }
+
+
+
+  if(
+    offer.availability &&
+    offer.availability.includes("InStock")
+  ){
+
+    return "受付中";
+
+  }
+
+
+  return "不明";
+
+}
+
+
+
+async function main(){
+
+
+try{
+
+
+console.log(
+"取得開始"
+);
+
+
+const html =
+await fetchPage();
+
+
+
+console.log(
+"HTML取得:",
+html.length,
+"文字"
+);
+
+
+
+const events =
+extractJsonLD(html);
+
+
+
+console.log(
+"JSONイベント数:",
+events.length
+);
+
+
+
+for(
+const event of events
+){
+
+
+if(
+event.location &&
+event.location.address &&
+event.location.address.addressRegion === "千葉県"
+){
+
+console.log(
+"\n===================="
+);
+
+console.log(
+"会場:",
+event.location.name
+);
+
+console.log(
+"日程:",
+event.startDate,
+"〜",
+event.endDate
+);
+
+
+
+for(
+const offer of event.offers || []
+){
+
+console.log(
+"販売状態:",
+convertStatus(offer)
+);
+
+
+console.log(
+"元データ:",
+offer.availability
+);
+
+
+console.log(
+"販売開始:",
+offer.validFrom
+);
 
 
 }
 
+
+}
+
+
+}
+
+
+}
+catch(e){
+
+console.log(
+"エラー:",
+e.message
+);
+
+}
+
+
+}
 
 
 main();
