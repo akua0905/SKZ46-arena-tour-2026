@@ -5,117 +5,68 @@ const url =
 "https://l-tike.com/concert/mevent/?mid=366800";
 
 
-const options = {
+https.get(
 
-  headers: {
+url,
 
-    "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+{
+headers:{
+"User-Agent":
+"Mozilla/5.0"
+}
+},
 
-    "Accept":
-    "text/html,application/xhtml+xml",
-
-    "Accept-Language":
-    "ja,en-US;q=0.9"
-
-  }
-
-};
+(res)=>{
 
 
-
-console.log("HTTPS接続開始");
-
+let body="";
 
 
-const req = https.get(
-
-  url,
-
-  options,
-
-  (res)=>{
-
-
-    console.log(
-      "Status:",
-      res.statusCode
-    );
+res.on(
+"data",
+chunk=>{
+body += chunk;
+}
+);
 
 
-    let body = "";
+res.on(
+"end",
+()=>{
 
 
-    res.on(
-      "data",
-      (chunk)=>{
+const words=[
 
-        body += chunk;
+"発売中",
+"受付中",
+"予定枚数終了",
+"SOLD OUT",
+"完売",
+"残席"
 
-      }
-    );
-
-
-    res.on(
-      "end",
-      ()=>{
+];
 
 
-        console.log(
-          "取得文字数:",
-          body.length
-        );
+console.log("確認結果");
 
 
-        console.log(
-          body.substring(0,500)
-        );
+for(
+const word of words
+){
+
+console.log(
+word,
+body.includes(word)
+);
+
+}
 
 
-      }
-    );
-
-
-  }
+}
 
 );
 
 
-
-req.setTimeout(
-
-  30000,
-
-  ()=>{
-
-
-    console.log(
-      "30秒タイムアウト"
-    );
-
-
-    req.destroy();
-
-
-  }
-
-);
-
-
-
-req.on(
-
-  "error",
-
-  (err)=>{
-
-
-    console.log(
-      "エラー:",
-      err.message
-    );
-
-
-  }
+}
 
 );
