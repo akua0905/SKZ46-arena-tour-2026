@@ -1,7 +1,7 @@
 const https = require("https");
 const fs = require("fs");
 
-const url =
+const URL =
   "https://l-tike.com/concert/mevent/?mid=366800";
 
 const STATE_FILE =
@@ -11,18 +11,18 @@ const DISCORD_WEBHOOK =
   process.env.DISCORD_WEBHOOK;
 
 
-// ------------------------------
+// ==========================
 // ローチケ取得
-// ------------------------------
+// ==========================
 
-function fetchPage() {
+function fetchPage(){
 
 return new Promise((resolve,reject)=>{
 
 
 const req = https.get(
 
-url,
+URL,
 
 {
 headers:{
@@ -33,7 +33,14 @@ headers:{
 }
 },
 
+
 (res)=>{
+
+
+console.log(
+"Status:",
+res.statusCode
+);
 
 
 let html="";
@@ -42,7 +49,7 @@ let html="";
 res.on(
 "data",
 chunk=>{
-html+=chunk;
+html += chunk;
 }
 );
 
@@ -51,12 +58,31 @@ res.on(
 "end",
 ()=>{
 
+
+if(html.length < 10000){
+
+reject(
+new Error(
+"HTML取得量不足"
+)
+);
+
+return;
+
+}
+
+
 resolve(html);
 
-});
+
+}
+);
 
 
-});
+}
+
+);
+
 
 
 req.setTimeout(
@@ -71,7 +97,9 @@ new Error(
 )
 );
 
-});
+}
+);
+
 
 
 req.on(
@@ -86,11 +114,77 @@ reject
 
 
 
-// ------------------------------
-// JSON-LD抽出
-// ------------------------------
+// ==========================
+// リトライ取得
+// ==========================
+
+async function getHTML(){
+
+
+for(
+let i=1;
+i<=3;
+i++
+){
+
+
+try{
+
+
+console.log(
+`取得試行 ${i}/3`
+);
+
+
+return await fetchPage();
+
+
+}
+catch(e){
+
+
+console.log(
+"取得失敗:",
+e.message
+);
+
+
+
+if(i<3){
+
+console.log(
+"5秒待機"
+);
+
+
+await new Promise(
+r=>setTimeout(r,5000)
+);
+
+}
+
+
+}
+
+
+}
+
+
+throw new Error(
+"3回取得失敗"
+);
+
+
+}
+
+
+
+// ==========================
+// JSON-LD解析
+// ==========================
 
 function extractEvents(html){
+
 
 const regex =
 /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
@@ -101,30 +195,31 @@ let match;
 let events=[];
 
 
+
 while(
 (match=regex.exec(html))
 ){
 
 try{
 
+
 const data =
 JSON.parse(match[1]);
 
 
-if(
-Array.isArray(data)
-){
+if(Array.isArray(data)){
 
 events.push(...data);
 
-}
-else{
+}else{
 
 events.push(data);
 
 }
 
+
 }catch(e){}
+
 
 
 }
@@ -136,9 +231,9 @@ return events;
 
 
 
-// ------------------------------
-// 状態判定
-// ------------------------------
+// ==========================
+// ステータス判定
+// ==========================
 
 function getStatus(offer){
 
@@ -192,6 +287,7 @@ return "受付中";
 }
 
 
+
 return "不明";
 
 
@@ -199,11 +295,11 @@ return "不明";
 
 
 
-// ------------------------------
+// ==========================
 // Discord通知
-// ------------------------------
+// ==========================
 
-async function sendDiscord(message){
+async function sendDiscord(text){
 
 
 if(!DISCORD_WEBHOOK){
@@ -217,20 +313,27 @@ return;
 }
 
 
+
 await fetch(
+
 DISCORD_WEBHOOK,
+
 {
 method:"POST",
+
 headers:{
 "Content-Type":
 "application/json"
 },
+
 body:JSON.stringify({
 
-content:message
+content:text
 
 })
+
 }
+
 );
 
 
@@ -238,9 +341,9 @@ content:message
 
 
 
-// ------------------------------
+// ==========================
 // メイン
-// ------------------------------
+// ==========================
 
 async function main(){
 
@@ -255,7 +358,19 @@ console.log(
 
 
 const html =
-await fetchPage();
+await getHTML();
+
+
+
+console.log(
+"取得成功"
+);
+
+
+console.log(
+"文字数:",
+html.length
+);
 
 
 
@@ -264,13 +379,14 @@ extractEvents(html);
 
 
 
-let current = {};
+let current={};
 
 
 
 for(
 const event of events
 ){
+
 
 
 if(
@@ -282,7 +398,7 @@ event.location.name.includes("ＬａＬａ")
 
 
 
-let count=1;
+let no=1;
 
 
 for(
@@ -291,15 +407,17 @@ const offer of event.offers || []
 
 
 current[
-`LaLa_${count}`
+`LaLa_${no}`
 ]
 =
 getStatus(offer);
 
 
-count++;
+no++;
+
 
 }
+
 
 
 }
@@ -336,12 +454,15 @@ STATE_FILE,
 
 
 fs.writeFileSync(
+
 STATE_FILE,
+
 JSON.stringify(
 current,
 null,
 2
 )
+
 );
 
 
@@ -357,7 +478,8 @@ old[key] !== current[key]
 ){
 
 
-const msg =
+
+const message =
 `
 🎫 櫻坂46 千葉公演 状態変更
 
@@ -375,21 +497,30 @@ ${current[key]}
 `;
 
 
-console.log(msg);
+
+console.log(
+message
+);
 
 
-await sendDiscord(msg);
+
+await sendDiscord(
+message
+);
+
 
 
 }
 
 
 }
+
 
 
 console.log(
 "完了"
 );
+
 
 
 }
