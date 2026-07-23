@@ -1,36 +1,78 @@
 name: monitor
 
+
 on:
+
   schedule:
+
     - cron: "*/5 * * * *"
+
 
   workflow_dispatch:
 
+
+
 jobs:
+
   check:
-    runs-on: ubuntu-latest
+
+
+    runs-on:
+
+      ubuntu-latest
+
+
 
     steps:
 
-      - name: Checkout
-        uses: actions/checkout@v4
+
+      - name:
+          Checkout
+
+        uses:
+          actions/checkout@v5
 
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+
+      - name:
+          Setup Node
+
+        uses:
+          actions/setup-node@v5
+
         with:
-          node-version: "20"
+
+          node-version:
+            "22"
 
 
-      - name: Install packages
-        run: npm install
+
+      - name:
+          Install packages
+
+        run:
+
+          npm install
 
 
-      - name: Install browser
-        run: npx playwright install chromium
+
+      - name:
+          Install Playwright
+
+        run:
+
+          npx playwright install chromium
 
 
-      - name: Run monitor
-        run: node monitor.js
+
+      - name:
+          Run monitor
+
+        run:
+
+          node monitor.js
+
         env:
-          WEBHOOK: ${{ secrets.WEBHOOK }}
+
+          WEBHOOK:
+            ${{ secrets.WEBHOOK }}
