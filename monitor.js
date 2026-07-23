@@ -1,146 +1,184 @@
 const https = require("https");
 
 const url =
-  "https://l-tike.com/concert/mevent/?mid=366800";
+"https://l-tike.com/concert/mevent/?mid=366800";
 
 
-function fetchLticket() {
+function request(){
 
-  return new Promise((resolve, reject) => {
-
-    console.log("ローチケ取得開始");
-
-    const req = https.get(
-      url,
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-          "Accept-Language":
-            "ja-JP,ja;q=0.9"
-        }
-      },
-      (res) => {
-
-        console.log(
-          "HTTP Status:",
-          res.statusCode
-        );
-
-        let html = "";
+return new Promise((resolve,reject)=>{
 
 
-        res.on(
-          "data",
-          (chunk) => {
-            html += chunk;
-          }
-        );
+const req = https.get(
+
+url,
+
+{
+
+headers:{
+
+"User-Agent":
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+
+"Accept":
+"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+
+"Accept-Language":
+"ja-JP,ja;q=0.9",
+
+"Connection":
+"close"
+
+}
+
+},
+
+(res)=>{
 
 
-        res.on(
-          "end",
-          () => {
-
-            resolve(html);
-
-          }
-        );
+console.log(
+"Status:",
+res.statusCode
+);
 
 
-      }
-    );
+let data="";
 
 
-    req.setTimeout(
-      30000,
-      () => {
-
-        req.destroy();
-
-        reject(
-          new Error(
-            "30秒タイムアウト"
-          )
-        );
-
-      }
-    );
+res.on(
+"data",
+chunk=>{
+data += chunk;
+}
+);
 
 
-    req.on(
-      "error",
-      (error) => {
+res.on(
+"end",
+()=>{
 
-        reject(error);
+resolve(data);
 
-      }
-    );
+}
+
+);
 
 
-  });
+}
+
+);
+
+
+
+req.setTimeout(
+
+30000,
+
+()=>{
+
+req.destroy();
+
+reject(
+new Error(
+"timeout"
+)
+);
+
+}
+
+);
+
+
+
+req.on(
+"error",
+reject
+);
+
+
+});
+
 
 }
 
 
 
-async function main() {
-
-  try {
-
-    const html =
-      await fetchLticket();
+async function main(){
 
 
-    console.log(
-      "取得成功"
-    );
+for(
+let i=1;
+i<=2;
+i++
+){
 
 
-    console.log(
-      "文字数:",
-      html.length
-    );
+try{
 
 
-    const keywords = [
-      "発売中",
-      "受付中",
-      "予定枚数終了",
-      "SOLD OUT",
-      "完売"
-    ];
+console.log(
+"試行:",
+i
+);
 
 
-    console.log(
-      "状態確認"
-    );
+const html =
+await request();
 
 
-    for (
-      const word of keywords
-    ) {
-
-      console.log(
-        word + ":",
-        html.includes(word)
-      );
-
-    }
+console.log(
+"取得成功"
+);
 
 
-  }
-  catch(error) {
+console.log(
+"文字数:",
+html.length
+);
 
-    console.log(
-      "エラー:"
-    );
 
-    console.log(
-      error.message
-    );
 
-  }
+console.log(
+"予定枚数終了:",
+html.includes("予定枚数終了")
+);
+
+
+
+console.log(
+"受付中:",
+html.includes("受付中")
+);
+
+
+
+break;
+
+
+
+}catch(e){
+
+
+console.log(
+"失敗:",
+e.message
+);
+
+
+
+if(i===2){
+
+console.log(
+"2回失敗"
+);
+
+}
+
+}
+
+
+}
+
 
 }
 
