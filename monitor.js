@@ -1,4 +1,4 @@
-const http = require("http");
+const https = require("https");
 
 
 const url =
@@ -10,10 +10,13 @@ const options = {
   headers: {
 
     "User-Agent":
-    "Mozilla/5.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
 
     "Accept":
-    "text/html,application/xhtml+xml"
+    "text/html,application/xhtml+xml",
+
+    "Accept-Language":
+    "ja,en-US;q=0.9"
 
   }
 
@@ -21,63 +24,98 @@ const options = {
 
 
 
-https.get(
-
-url,
-
-options,
-
-(res)=>{
+console.log("HTTPS接続開始");
 
 
-console.log(
-"Status:",
-res.statusCode
+
+const req = https.get(
+
+  url,
+
+  options,
+
+  (res)=>{
+
+
+    console.log(
+      "Status:",
+      res.statusCode
+    );
+
+
+    let body = "";
+
+
+    res.on(
+      "data",
+      (chunk)=>{
+
+        body += chunk;
+
+      }
+    );
+
+
+    res.on(
+      "end",
+      ()=>{
+
+
+        console.log(
+          "取得文字数:",
+          body.length
+        );
+
+
+        console.log(
+          body.substring(0,500)
+        );
+
+
+      }
+    );
+
+
+  }
+
 );
 
 
-let body="";
+
+req.setTimeout(
+
+  30000,
+
+  ()=>{
 
 
-res.on(
-"data",
-chunk=>{
-body += chunk;
-}
-);
+    console.log(
+      "30秒タイムアウト"
+    );
 
 
-res.on(
-"end",
-()=>{
+    req.destroy();
 
-console.log(
-"取得文字数:",
-body.length
-);
 
-console.log(
-body.substring(0,300)
-);
-
-}
+  }
 
 );
 
 
-}
 
-).on(
+req.on(
 
-"error",
+  "error",
 
-(err)=>{
+  (err)=>{
 
-console.log(
-"Error:",
-err.message
-);
 
-}
+    console.log(
+      "エラー:",
+      err.message
+    );
+
+
+  }
 
 );
