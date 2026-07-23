@@ -6,6 +6,7 @@ async function main() {
   const url =
     "https://l-tike.com/concert/mevent/?mid=366800";
 
+
   const webhook =
     process.env.WEBHOOK;
 
@@ -47,34 +48,25 @@ async function main() {
 
 
 
-  let result = "";
+  let message = "";
 
 
 
   try {
 
 
-    console.log(
-      "アクセス開始"
-    );
-
-
     let lastError = "";
 
 
 
-    for(
-      let i = 1;
-      i <= 3;
-      i++
-    ){
+    for(let i = 1; i <= 3; i++){
 
 
       try {
 
 
         console.log(
-          "試行:",
+          "アクセス試行:",
           i
         );
 
@@ -86,7 +78,7 @@ async function main() {
           {
 
             waitUntil:
-            "domcontentloaded",
+            "commit",
 
             timeout:
             30000
@@ -101,7 +93,7 @@ async function main() {
         break;
 
 
-      } catch(e) {
+      }catch(e){
 
 
         lastError =
@@ -115,7 +107,7 @@ async function main() {
 
 
         await page.waitForTimeout(
-          3000
+          5000
         );
 
 
@@ -128,8 +120,6 @@ async function main() {
     if(lastError){
 
       throw new Error(
-        "3回アクセス失敗\n\n"
-        +
         lastError
       );
 
@@ -137,8 +127,10 @@ async function main() {
 
 
 
+    // ページ描画待機
+
     await page.waitForTimeout(
-      3000
+      5000
     );
 
 
@@ -162,7 +154,7 @@ async function main() {
 
 
     console.log(
-      text.substring(0,500)
+      text.substring(0,1000)
     );
 
 
@@ -185,7 +177,7 @@ async function main() {
     }else{
 
 
-      const words = [
+      const checks = [
 
         "発売中",
 
@@ -204,7 +196,7 @@ async function main() {
 
 
       for(
-        const word of words
+        const word of checks
       ){
 
         if(
@@ -225,25 +217,34 @@ async function main() {
 
 
 
-    result =
-    "🎫 ローチケ監視結果\n\n"
-    +
-    status
-    +
-    "\n\n"
-    +
-    url;
+    message =
+
+      "🎫 ローチケ監視結果\n\n"
+
+      +
+
+      status
+
+      +
+
+      "\n\n"
+
+      +
+
+      url;
 
 
 
-  }
-  catch(e){
+  }catch(e){
 
 
-    result =
-    "❌ ローチケ監視エラー\n\n"
-    +
-    e.message;
+    message =
+
+      "❌ ローチケ監視エラー\n\n"
+
+      +
+
+      e.message;
 
 
 
@@ -258,7 +259,7 @@ async function main() {
 
   await sendDiscord(
     webhook,
-    result
+    message
   );
 
 
@@ -272,12 +273,14 @@ async function main() {
 
 async function sendDiscord(
   webhook,
-  message
+  content
 ){
+
 
   if(!webhook){
     return;
   }
+
 
 
   await fetch(
@@ -286,8 +289,7 @@ async function sendDiscord(
 
     {
 
-      method:
-      "POST",
+      method:"POST",
 
       headers:{
         "Content-Type":
@@ -298,13 +300,14 @@ async function sendDiscord(
       JSON.stringify({
 
         content:
-        message
+        content
 
       })
 
     }
 
   );
+
 
 }
 
