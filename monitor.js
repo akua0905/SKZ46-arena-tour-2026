@@ -3,243 +3,284 @@ const { chromium } = require("playwright");
 
 async function main() {
 
-  const url =
-    "https://l-tike.com/concert/mevent/?mid=366800";
 
+const url =
+"https://l-tike.com/concert/mevent/?mid=366800";
 
-  const webhook =
-    process.env.WEBHOOK;
 
+const webhook =
+process.env.WEBHOOK;
 
-  const browser =
-    await chromium.launch({
-      headless: true
-    });
 
 
-  const context =
-    await browser.newContext({
+const browser =
+await chromium.launch({
 
-      userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
+  headless:true,
 
-      locale:"ja-JP",
+  args:[
+    "--disable-http2",
+    "--disable-blink-features=AutomationControlled"
+  ]
 
-      viewport:{
-        width:1280,
-        height:900
-      }
+});
 
-    });
 
 
+const context =
+await browser.newContext({
 
-  const page =
-    await context.newPage();
+  userAgent:
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
 
 
+  locale:"ja-JP",
 
-  try {
 
-
-    console.log("ページ取得開始");
-
-
-
-    await page.goto(
-      url,
-      {
-        waitUntil:"domcontentloaded",
-        timeout:60000
-      }
-    );
-
-
-
-    await page.waitForTimeout(3000);
-
-
-
-    const title =
-      await page.title();
-
-
-
-    const text =
-      await page
-      .locator("body")
-      .innerText();
-
-
-
-    console.log(
-      "タイトル:",
-      title
-    );
-
-
-    console.log(
-      text.substring(0,500)
-    );
-
-
-
-    let status =
-    "不明";
-
-
-
-    // Bot対策ページ確認
-
-    if(
-      text.includes(
-        "Oh hello! Nice to see you."
-      )
-    ){
-
-      status =
-      "Bot対策ページ検出";
-
-
-    }else{
-
-
-      const words=[
-
-        "発売中",
-
-        "受付中",
-
-        "予定枚数終了",
-
-        "SOLD OUT",
-
-        "完売",
-
-        "残席あり"
-
-      ];
-
-
-
-      for(
-        const word of words
-      ){
-
-        if(
-          text.includes(word)
-        ){
-
-          status=word;
-
-          break;
-
-        }
-
-      }
-
-
-    }
-
-
-
-    console.log(
-      "判定:",
-      status
-    );
-
-
-
-    if(webhook){
-
-
-      await fetch(
-        webhook,
-        {
-
-          method:"POST",
-
-          headers:{
-            "Content-Type":
-            "application/json"
-          },
-
-          body:
-          JSON.stringify({
-
-            content:
-            "🎫 ローチケ監視結果\n\n"
-            +
-            status
-            +
-            "\n\n"
-            +
-            url
-
-          })
-
-        }
-      );
-
-
-    }
-
-
-
+  viewport:{
+    width:1280,
+    height:900
   }
-  catch(error){
 
 
-    console.log(
-      "エラー:",
-      error.message
-    );
+});
 
 
 
-    if(webhook){
-
-
-      await fetch(
-        webhook,
-        {
-
-          method:"POST",
-
-          headers:{
-            "Content-Type":
-            "application/json"
-          },
-
-          body:
-          JSON.stringify({
-
-            content:
-            "❌ ローチケ監視エラー\n\n"
-            +
-            error.message
-
-          })
-
-        }
-      );
-
-
-    }
+const page =
+await context.newPage();
 
 
 
-  }
-  finally{
+try{
 
 
-    await browser.close();
+console.log("アクセス開始");
 
 
-  }
+
+let success=false;
+
+
+
+for(let i=1;i<=3;i++){
+
+
+try{
+
+
+await page.goto(
+
+url,
+
+{
+
+waitUntil:"commit",
+
+timeout:60000
+
+}
+
+);
+
+
+
+success=true;
+
+break;
 
 
 }
+
+catch(e){
+
+
+console.log(
+"再試行",
+i,
+e.message
+);
+
+
+await page.waitForTimeout(5000);
+
+
+}
+
+
+
+}
+
+
+
+if(!success){
+
+throw new Error(
+"3回アクセス失敗しました"
+);
+
+}
+
+
+
+await page.waitForTimeout(5000);
+
+
+
+const text =
+await page
+.locator("body")
+.innerText();
+
+
+
+console.log(
+text.substring(0,500)
+);
+
+
+
+let status="不明";
+
+
+
+if(
+text.includes(
+"Oh hello! Nice to see you."
+)
+){
+
+status=
+"Bot対策ページ";
+
+
+}else{
+
+
+const check=[
+
+"発売中",
+
+"受付中",
+
+"予定枚数終了",
+
+"SOLD OUT",
+
+"完売"
+
+];
+
+
+
+for(
+const x of check
+){
+
+if(text.includes(x)){
+
+status=x;
+
+break;
+
+}
+
+}
+
+
+}
+
+
+
+console.log(
+"結果:",
+status
+);
+
+
+
+await sendDiscord(
+webhook,
+"🎫 ローチケ監視\n\n"
++
+status
++
+"\n\n"
++
+url
+);
+
+
+
+}
+
+catch(e){
+
+
+console.log(e.message);
+
+
+await sendDiscord(
+
+webhook,
+
+"❌ ローチケ監視エラー\n\n"
++
+e.message
+
+);
+
+
+}
+
+
+
+await browser.close();
+
+
+}
+
+
+
+
+
+async function sendDiscord(
+webhook,
+message
+){
+
+
+if(!webhook)return;
+
+
+
+await fetch(
+
+webhook,
+
+{
+
+method:"POST",
+
+headers:{
+"Content-Type":
+"application/json"
+},
+
+body:
+JSON.stringify({
+
+content:message
+
+})
+
+}
+
+);
+
+
+}
+
 
 
 main();
