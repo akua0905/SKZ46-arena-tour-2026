@@ -1,77 +1,83 @@
 const { chromium } = require("playwright");
 
 
-async function main() {
+async function main(){
 
-  const browser =
-    await chromium.launch({
-      headless: true
-    });
-
-
-  const page =
-    await browser.newPage();
+const browser =
+await chromium.launch({
+  headless:true
+});
 
 
-  let message = "";
+const page =
+await browser.newPage();
 
 
-  try {
-
-    console.log("接続テスト開始");
+try{
 
 
-    await page.goto(
-      "https://www.google.com",
-      {
-        waitUntil: "commit",
-        timeout: 30000
-      }
-    );
+console.log("ローチケ接続開始");
 
 
-    const title =
-      await page.title();
+const response =
+await page.goto(
 
+"https://l-tike.com",
 
-    console.log(
-      "タイトル:",
-      title
-    );
+{
 
+waitUntil:"commit",
 
-    message =
-      "✅ 接続テスト成功\n\n"
-      +
-      "タイトル:\n"
-      +
-      title;
+timeout:30000
 
+}
 
-  }
-  catch(error) {
-
-
-    console.log(
-      "エラー:",
-      error.message
-    );
-
-
-    message =
-      "❌ 接続テスト失敗\n\n"
-      +
-      error.message;
-
-
-  }
+);
 
 
 
-  console.log(message);
+console.log(
+"トップページ接続成功"
+);
 
 
-  await browser.close();
+console.log(
+"status:",
+response.status()
+);
+
+
+
+await page.waitForTimeout(3000);
+
+
+
+console.log(
+"タイトル:",
+await page.title()
+);
+
+
+
+}
+catch(e){
+
+
+console.log(
+"ローチケ接続失敗"
+);
+
+
+console.log(
+e.message
+);
+
+
+}
+
+
+
+await browser.close();
 
 
 }
