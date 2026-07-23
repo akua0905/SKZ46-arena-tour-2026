@@ -4,45 +4,95 @@ const url =
   "https://l-tike.com/concert/mevent/?mid=366800";
 
 
-function fetchPage() {
+// ==============================
+// HTML取得（3回リトライ）
+// ==============================
+
+function fetchPage(attempt = 1) {
 
   return new Promise((resolve, reject) => {
 
+
+    console.log(
+      `取得試行 ${attempt}/3`
+    );
+
+
     const req = https.get(
+
       url,
+
       {
         headers: {
+
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+
+          "Accept":
+            "text/html,application/xhtml+xml",
+
           "Accept-Language":
             "ja-JP,ja;q=0.9"
+
         }
       },
 
+
       (res) => {
 
+
+        console.log(
+          "Status:",
+          res.statusCode
+        );
+
+
         let html = "";
+
 
         res.on(
           "data",
           chunk => {
+
             html += chunk;
+
           }
         );
+
 
         res.on(
           "end",
           () => {
-            resolve(html);
+
+            if(html.length > 10000){
+
+              resolve(html);
+
+            }
+            else{
+
+              reject(
+                new Error(
+                  "HTML取得量不足"
+                )
+              );
+
+            }
+
           }
         );
 
+
       }
+
+
     );
 
 
     req.setTimeout(
+
       30000,
+
       () => {
 
         req.destroy();
@@ -54,6 +104,7 @@ function fetchPage() {
         );
 
       }
+
     );
 
 
@@ -65,110 +116,186 @@ function fetchPage() {
 
   });
 
-}
-
-
-
-function extractJsonLD(html) {
-
-  const regex =
-    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
-
-
-  let match;
-
-  let events = [];
-
-
-  while(
-    (match = regex.exec(html))
-  ){
-
-    try{
-
-      const data =
-        JSON.parse(match[1]);
-
-
-      if(
-        Array.isArray(data)
-      ){
-
-        events.push(...data);
-
-      }
-      else{
-
-        events.push(data);
-
-      }
-
-
-    }
-    catch(e){
-
-    }
-
-  }
-
-
-  return events;
 
 }
 
 
 
-function convertStatus(offer) {
+async function getHTML(){
 
 
-  const now =
-    new Date();
+for(
+let i = 1;
+i <= 3;
+i++
+){
 
 
-  const start =
-    offer.validFrom
-      ? new Date(offer.validFrom)
-      : null;
+try{
 
 
-
-  if(
-    start &&
-    now < start
-  ){
-
-    return "発売前";
-
-  }
+return await fetchPage(i);
 
 
-
-  if(
-    offer.availability &&
-    offer.availability.includes("SoldOut")
-  ){
-
-    return "予定枚数終了";
-
-  }
+}
+catch(e){
 
 
-
-  if(
-    offer.availability &&
-    offer.availability.includes("InStock")
-  ){
-
-    return "受付中";
-
-  }
+console.log(
+"失敗:",
+e.message
+);
 
 
-  return "不明";
+if(i < 3){
+
+
+console.log(
+"5秒待機..."
+);
+
+
+await new Promise(
+r=>setTimeout(r,5000)
+);
+
 
 }
 
 
+}
+
+
+}
+
+
+throw new Error(
+"3回取得失敗"
+);
+
+
+}
+
+
+
+// ==============================
+// JSON-LD抽出
+// ==============================
+
+function extractEvents(html){
+
+
+const regex =
+/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
+
+
+let match;
+
+let result=[];
+
+
+while(
+(match = regex.exec(html))
+){
+
+try{
+
+
+const data =
+JSON.parse(match[1]);
+
+
+if(Array.isArray(data)){
+
+result.push(...data);
+
+}
+else{
+
+result.push(data);
+
+}
+
+
+}
+catch(e){}
+
+
+}
+
+
+return result;
+
+}
+
+
+
+// ==============================
+// 状態判定
+// ==============================
+
+function getStatus(offer){
+
+
+const now =
+new Date();
+
+
+const start =
+offer.validFrom
+?
+new Date(offer.validFrom)
+:
+null;
+
+
+
+if(
+start &&
+now < start
+){
+
+return "発売前";
+
+}
+
+
+
+if(
+offer.availability &&
+offer.availability.includes(
+"SoldOut"
+)
+){
+
+return "予定枚数終了";
+
+}
+
+
+
+if(
+offer.availability &&
+offer.availability.includes(
+"InStock"
+)
+){
+
+return "受付中";
+
+}
+
+
+
+return "不明";
+
+}
+
+
+
+// ==============================
+// メイン
+// ==============================
 
 async function main(){
 
@@ -177,30 +304,35 @@ try{
 
 
 console.log(
-"取得開始"
+"ローチケ監視開始"
 );
 
 
+
 const html =
-await fetchPage();
+await getHTML();
 
 
 
 console.log(
-"HTML取得:",
-html.length,
-"文字"
+"取得成功"
+);
+
+
+console.log(
+"文字数:",
+html.length
 );
 
 
 
 const events =
-extractJsonLD(html);
+extractEvents(html);
 
 
 
 console.log(
-"JSONイベント数:",
+"イベント数:",
 events.length
 );
 
@@ -217,14 +349,17 @@ event.location.address &&
 event.location.address.addressRegion === "千葉県"
 ){
 
+
 console.log(
 "\n===================="
 );
+
 
 console.log(
 "会場:",
 event.location.name
 );
+
 
 console.log(
 "日程:",
@@ -239,20 +374,21 @@ for(
 const offer of event.offers || []
 ){
 
+
 console.log(
-"販売状態:",
-convertStatus(offer)
+"状態:",
+getStatus(offer)
 );
 
 
 console.log(
-"元データ:",
+"availability:",
 offer.availability
 );
 
 
 console.log(
-"販売開始:",
+"validFrom:",
 offer.validFrom
 );
 
@@ -269,10 +405,12 @@ offer.validFrom
 }
 catch(e){
 
+
 console.log(
 "エラー:",
 e.message
 );
+
 
 }
 
