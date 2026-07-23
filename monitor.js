@@ -5,34 +5,127 @@ const url =
 "https://l-tike.com/concert/mevent/?mid=366800";
 
 
-https.get(
+function fetchPage(){
 
-url,
+  return new Promise((resolve,reject)=>{
 
-{
-headers:{
-"User-Agent":
-"Mozilla/5.0"
+
+    const req = https.get(
+
+      url,
+
+      {
+
+        headers:{
+
+          "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+
+          "Accept":
+          "text/html,application/xhtml+xml",
+
+          "Accept-Language":
+          "ja,en-US;q=0.9"
+
+        }
+
+      },
+
+
+      (res)=>{
+
+
+        console.log(
+          "Status:",
+          res.statusCode
+        );
+
+
+        let body="";
+
+
+        res.on(
+          "data",
+          chunk=>{
+
+            body += chunk;
+
+          }
+        );
+
+
+        res.on(
+          "end",
+          ()=>{
+
+            resolve(body);
+
+          }
+        );
+
+
+      }
+
+    );
+
+
+    req.setTimeout(
+
+      30000,
+
+      ()=>{
+
+        req.destroy(
+          new Error(
+            "Timeout"
+          )
+        );
+
+      }
+
+    );
+
+
+    req.on(
+      "error",
+      err=>{
+
+        reject(err);
+
+      }
+
+    );
+
+
+  });
+
 }
-},
-
-(res)=>{
 
 
-let body="";
+
+async function main(){
 
 
-res.on(
-"data",
-chunk=>{
-body += chunk;
-}
+let html;
+
+
+try{
+
+
+html =
+await fetchPage();
+
+
+console.log(
+"取得成功"
 );
 
 
-res.on(
-"end",
-()=>{
+console.log(
+"文字数:",
+html.length
+);
+
 
 
 const words=[
@@ -42,31 +135,39 @@ const words=[
 "予定枚数終了",
 "SOLD OUT",
 "完売",
-"残席"
+"チケット"
 
 ];
-
-
-console.log("確認結果");
 
 
 for(
 const word of words
 ){
 
+
 console.log(
 word,
-body.includes(word)
+html.includes(word)
 );
+
+
+}
+
+
+
+}catch(e){
+
+
+console.log(
+"取得失敗:",
+e.message
+);
+
 
 }
 
 
 }
 
-);
 
-
-}
-
-);
+main();
