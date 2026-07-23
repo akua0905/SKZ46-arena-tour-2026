@@ -26,11 +26,21 @@ URL,
 
 {
 headers:{
+
 "User-Agent":
-"Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+
+"Accept":
+"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+
 "Accept-Language":
-"ja-JP,ja;q=0.9"
+"ja-JP,ja;q=0.9,en-US;q=0.8",
+
+"Cache-Control":
+"no-cache"
+
 }
+
 },
 
 
@@ -49,9 +59,10 @@ let html="";
 res.on(
 "data",
 chunk=>{
-html += chunk;
+html+=chunk;
 }
 );
+
 
 
 res.on(
@@ -76,28 +87,33 @@ resolve(html);
 
 
 }
+
 );
 
 
 }
+
 
 );
 
 
 
 req.setTimeout(
-30000,
+
+45000,
+
 ()=>{
 
 req.destroy();
 
 reject(
 new Error(
-"timeout"
+"45秒タイムアウト"
 )
 );
 
 }
+
 );
 
 
@@ -115,7 +131,7 @@ reject
 
 
 // ==========================
-// リトライ取得
+// リトライ
 // ==========================
 
 async function getHTML(){
@@ -139,6 +155,7 @@ console.log(
 return await fetchPage();
 
 
+
 }
 catch(e){
 
@@ -152,6 +169,7 @@ e.message
 
 if(i<3){
 
+
 console.log(
 "5秒待機"
 );
@@ -160,6 +178,7 @@ console.log(
 await new Promise(
 r=>setTimeout(r,5000)
 );
+
 
 }
 
@@ -180,7 +199,7 @@ throw new Error(
 
 
 // ==========================
-// JSON-LD解析
+// JSON-LD抽出
 // ==========================
 
 function extractEvents(html){
@@ -211,15 +230,16 @@ if(Array.isArray(data)){
 
 events.push(...data);
 
-}else{
+}
+else{
 
 events.push(data);
 
 }
 
 
-}catch(e){}
-
+}
+catch(e){}
 
 
 }
@@ -232,7 +252,7 @@ return events;
 
 
 // ==========================
-// ステータス判定
+// 状態判定
 // ==========================
 
 function getStatus(offer){
@@ -299,7 +319,7 @@ return "不明";
 // Discord通知
 // ==========================
 
-async function sendDiscord(text){
+async function sendDiscord(message){
 
 
 if(!DISCORD_WEBHOOK){
@@ -313,12 +333,12 @@ return;
 }
 
 
-
 await fetch(
 
 DISCORD_WEBHOOK,
 
 {
+
 method:"POST",
 
 headers:{
@@ -328,7 +348,7 @@ headers:{
 
 body:JSON.stringify({
 
-content:text
+content:message
 
 })
 
@@ -379,6 +399,13 @@ extractEvents(html);
 
 
 
+console.log(
+"イベント数:",
+events.length
+);
+
+
+
 let current={};
 
 
@@ -388,14 +415,12 @@ const event of events
 ){
 
 
-
 if(
 event.location &&
 event.location.address &&
 event.location.address.addressRegion==="千葉県" &&
 event.location.name.includes("ＬａＬａ")
 ){
-
 
 
 let no=1;
@@ -417,7 +442,6 @@ no++;
 
 
 }
-
 
 
 }
@@ -478,7 +502,6 @@ old[key] !== current[key]
 ){
 
 
-
 const message =
 `
 🎫 櫻坂46 千葉公演 状態変更
@@ -497,7 +520,6 @@ ${current[key]}
 `;
 
 
-
 console.log(
 message
 );
@@ -507,7 +529,6 @@ message
 await sendDiscord(
 message
 );
-
 
 
 }
