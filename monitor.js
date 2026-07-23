@@ -1,29 +1,165 @@
 const https = require("https");
 
-https.get(
+const urls = [
   "https://l-tike.com/",
-  {
-    headers:{
-      "User-Agent":"Mozilla/5.0"
-    }
-  },
-  res=>{
+  "https://l-tike.com/concert/mevent/?mid=366800"
+];
 
-    console.log("Status:",res.statusCode);
 
-    let data="";
+function test(url){
 
-    res.on("data",c=>{
-      data+=c;
-    });
+return new Promise((resolve)=>{
 
-    res.on("end",()=>{
-      console.log("文字数:",data.length);
-    });
 
-  }
-).on(
+console.log("");
+console.log("====================");
+console.log("接続テスト:");
+console.log(url);
+
+
+
+const req = https.get(
+
+url,
+
+{
+headers:{
+
+"User-Agent":
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+
+"Accept":
+"text/html,application/xhtml+xml",
+
+"Accept-Language":
+"ja-JP,ja;q=0.9"
+
+}
+
+},
+
+
+(res)=>{
+
+
+console.log(
+"Status:",
+res.statusCode
+);
+
+
+
+let html="";
+
+
+res.on(
+"data",
+chunk=>{
+html += chunk;
+}
+);
+
+
+
+res.on(
+"end",
+()=>{
+
+
+console.log(
+"取得文字数:",
+html.length
+);
+
+
+console.log(
+"取得成功"
+);
+
+
+resolve();
+
+
+}
+
+);
+
+
+}
+
+);
+
+
+
+req.setTimeout(
+
+30000,
+
+()=>{
+
+req.destroy();
+
+console.log(
+"30秒タイムアウト"
+);
+
+resolve();
+
+}
+
+);
+
+
+
+req.on(
 "error",
 e=>{
- console.log("ERROR:",e.message);
+
+console.log(
+"エラー:",
+e.message
+);
+
+
+resolve();
+
+}
+
+);
+
+
 });
+
+}
+
+
+
+async function main(){
+
+
+console.log(
+"ローチケ接続テスト開始"
+);
+
+
+
+for(
+const url of urls
+){
+
+await test(url);
+
+}
+
+
+
+console.log(
+"テスト終了"
+);
+
+
+}
+
+
+
+main();
