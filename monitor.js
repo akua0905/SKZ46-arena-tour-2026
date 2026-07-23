@@ -1,189 +1,96 @@
 const https = require("https");
+const fs = require("fs");
 
 const url =
   "https://l-tike.com/concert/mevent/?mid=366800";
 
+const STATE_FILE =
+  "state.json";
 
-// ==============================
-// HTML取得（3回リトライ）
-// ==============================
-
-function fetchPage(attempt = 1) {
-
-  return new Promise((resolve, reject) => {
+const DISCORD_WEBHOOK =
+  process.env.DISCORD_WEBHOOK;
 
 
-    console.log(
-      `取得試行 ${attempt}/3`
-    );
+// ------------------------------
+// ローチケ取得
+// ------------------------------
+
+function fetchPage() {
+
+return new Promise((resolve,reject)=>{
 
 
-    const req = https.get(
+const req = https.get(
 
-      url,
+url,
 
-      {
-        headers: {
-
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-
-          "Accept":
-            "text/html,application/xhtml+xml",
-
-          "Accept-Language":
-            "ja-JP,ja;q=0.9"
-
-        }
-      },
-
-
-      (res) => {
-
-
-        console.log(
-          "Status:",
-          res.statusCode
-        );
-
-
-        let html = "";
-
-
-        res.on(
-          "data",
-          chunk => {
-
-            html += chunk;
-
-          }
-        );
-
-
-        res.on(
-          "end",
-          () => {
-
-            if(html.length > 10000){
-
-              resolve(html);
-
-            }
-            else{
-
-              reject(
-                new Error(
-                  "HTML取得量不足"
-                )
-              );
-
-            }
-
-          }
-        );
-
-
-      }
-
-
-    );
-
-
-    req.setTimeout(
-
-      30000,
-
-      () => {
-
-        req.destroy();
-
-        reject(
-          new Error(
-            "30秒タイムアウト"
-          )
-        );
-
-      }
-
-    );
-
-
-    req.on(
-      "error",
-      reject
-    );
-
-
-  });
-
-
+{
+headers:{
+"User-Agent":
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+"Accept-Language":
+"ja-JP,ja;q=0.9"
 }
+},
+
+(res)=>{
 
 
-
-async function getHTML(){
-
-
-for(
-let i = 1;
-i <= 3;
-i++
-){
+let html="";
 
 
-try{
-
-
-return await fetchPage(i);
-
-
+res.on(
+"data",
+chunk=>{
+html+=chunk;
 }
-catch(e){
-
-
-console.log(
-"失敗:",
-e.message
 );
 
 
-if(i < 3){
+res.on(
+"end",
+()=>{
+
+resolve(html);
+
+});
 
 
-console.log(
-"5秒待機..."
+});
+
+
+req.setTimeout(
+30000,
+()=>{
+
+req.destroy();
+
+reject(
+new Error(
+"timeout"
+)
+);
+
+});
+
+
+req.on(
+"error",
+reject
 );
 
 
-await new Promise(
-r=>setTimeout(r,5000)
-);
-
-
-}
-
-
-}
-
-
-}
-
-
-throw new Error(
-"3回取得失敗"
-);
-
+});
 
 }
 
 
 
-// ==============================
+// ------------------------------
 // JSON-LD抽出
-// ==============================
+// ------------------------------
 
 function extractEvents(html){
-
 
 const regex =
 /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
@@ -191,48 +98,47 @@ const regex =
 
 let match;
 
-let result=[];
+let events=[];
 
 
 while(
-(match = regex.exec(html))
+(match=regex.exec(html))
 ){
 
 try{
-
 
 const data =
 JSON.parse(match[1]);
 
 
-if(Array.isArray(data)){
+if(
+Array.isArray(data)
+){
 
-result.push(...data);
+events.push(...data);
 
 }
 else{
 
-result.push(data);
+events.push(data);
+
+}
+
+}catch(e){}
+
 
 }
 
 
-}
-catch(e){}
-
-
-}
-
-
-return result;
+return events;
 
 }
 
 
 
-// ==============================
+// ------------------------------
 // 状態判定
-// ==============================
+// ------------------------------
 
 function getStatus(offer){
 
@@ -286,16 +192,55 @@ return "受付中";
 }
 
 
-
 return "不明";
+
 
 }
 
 
 
-// ==============================
+// ------------------------------
+// Discord通知
+// ------------------------------
+
+async function sendDiscord(message){
+
+
+if(!DISCORD_WEBHOOK){
+
+console.log(
+"Webhook未設定"
+);
+
+return;
+
+}
+
+
+await fetch(
+DISCORD_WEBHOOK,
+{
+method:"POST",
+headers:{
+"Content-Type":
+"application/json"
+},
+body:JSON.stringify({
+
+content:message
+
+})
+}
+);
+
+
+}
+
+
+
+// ------------------------------
 // メイン
-// ==============================
+// ------------------------------
 
 async function main(){
 
@@ -304,25 +249,13 @@ try{
 
 
 console.log(
-"ローチケ監視開始"
+"監視開始"
 );
 
 
 
 const html =
-await getHTML();
-
-
-
-console.log(
-"取得成功"
-);
-
-
-console.log(
-"文字数:",
-html.length
-);
+await fetchPage();
 
 
 
@@ -331,10 +264,7 @@ extractEvents(html);
 
 
 
-console.log(
-"イベント数:",
-events.length
-);
+let current = {};
 
 
 
@@ -346,28 +276,13 @@ const event of events
 if(
 event.location &&
 event.location.address &&
-event.location.address.addressRegion === "千葉県"
+event.location.address.addressRegion==="千葉県" &&
+event.location.name.includes("ＬａＬａ")
 ){
 
 
-console.log(
-"\n===================="
-);
 
-
-console.log(
-"会場:",
-event.location.name
-);
-
-
-console.log(
-"日程:",
-event.startDate,
-"〜",
-event.endDate
-);
-
+let count=1;
 
 
 for(
@@ -375,23 +290,14 @@ const offer of event.offers || []
 ){
 
 
-console.log(
-"状態:",
-getStatus(offer)
-);
+current[
+`LaLa_${count}`
+]
+=
+getStatus(offer);
 
 
-console.log(
-"availability:",
-offer.availability
-);
-
-
-console.log(
-"validFrom:",
-offer.validFrom
-);
-
+count++;
 
 }
 
@@ -400,6 +306,90 @@ offer.validFrom
 
 
 }
+
+
+
+console.log(
+current
+);
+
+
+
+let old={};
+
+
+
+if(
+fs.existsSync(STATE_FILE)
+){
+
+old =
+JSON.parse(
+fs.readFileSync(
+STATE_FILE,
+"utf8"
+)
+);
+
+}
+
+
+
+fs.writeFileSync(
+STATE_FILE,
+JSON.stringify(
+current,
+null,
+2
+)
+);
+
+
+
+for(
+const key of Object.keys(current)
+){
+
+
+if(
+old[key] &&
+old[key] !== current[key]
+){
+
+
+const msg =
+`
+🎫 櫻坂46 千葉公演 状態変更
+
+会場:
+ＬａＬａ arena TOKYO-BAY
+
+枠:
+${key}
+
+${old[key]}
+↓
+${current[key]}
+
+確認してください
+`;
+
+
+console.log(msg);
+
+
+await sendDiscord(msg);
+
+
+}
+
+
+}
+
+
+console.log(
+"完了"
+);
 
 
 }
@@ -416,6 +406,7 @@ e.message
 
 
 }
+
 
 
 main();
