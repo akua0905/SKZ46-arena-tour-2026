@@ -3,148 +3,35 @@ const { chromium } = require("playwright");
 
 async function main() {
 
-  const url =
-    "https://l-tike.com/concert/mevent/?mid=366800";
-
-
-  const webhook =
-    process.env.WEBHOOK;
-
-
   const browser =
     await chromium.launch({
-
-      headless: true,
-
-      args: [
-        "--disable-http2",
-        "--disable-blink-features=AutomationControlled"
-      ]
-
+      headless: true
     });
-
-
-
-  const context =
-    await browser.newContext({
-
-      userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
-
-      locale:
-      "ja-JP",
-
-      viewport:{
-        width:1280,
-        height:900
-      }
-
-    });
-
 
 
   const page =
-    await context.newPage();
-
+    await browser.newPage();
 
 
   let message = "";
 
 
-
   try {
 
-
-    let lastError = "";
-
+    console.log("接続テスト開始");
 
 
-    for(let i = 1; i <= 3; i++){
-
-
-      try {
-
-
-        console.log(
-          "アクセス試行:",
-          i
-        );
-
-
-        await page.goto(
-
-          url,
-
-          {
-
-            waitUntil:
-            "commit",
-
-            timeout:
-            30000
-
-          }
-
-        );
-
-
-        lastError = "";
-
-        break;
-
-
-      }catch(e){
-
-
-        lastError =
-        e.message;
-
-
-        console.log(
-          "失敗:",
-          lastError
-        );
-
-
-        await page.waitForTimeout(
-          5000
-        );
-
-
+    await page.goto(
+      "https://www.google.com",
+      {
+        waitUntil: "commit",
+        timeout: 30000
       }
-
-    }
-
-
-
-    if(lastError){
-
-      throw new Error(
-        lastError
-      );
-
-    }
-
-
-
-    // ページ描画待機
-
-    await page.waitForTimeout(
-      5000
     );
-
 
 
     const title =
       await page.title();
-
-
-
-    const text =
-      await page
-      .locator("body")
-      .innerText();
-
 
 
     console.log(
@@ -153,164 +40,41 @@ async function main() {
     );
 
 
-    console.log(
-      text.substring(0,1000)
-    );
-
-
-
-    let status =
-    "判定不可";
-
-
-
-    if(
-      text.includes(
-        "Oh hello! Nice to see you."
-      )
-    ){
-
-      status =
-      "Bot対策ページ";
-
-
-    }else{
-
-
-      const checks = [
-
-        "発売中",
-
-        "受付中",
-
-        "予定枚数終了",
-
-        "SOLD OUT",
-
-        "完売",
-
-        "残席あり"
-
-      ];
-
-
-
-      for(
-        const word of checks
-      ){
-
-        if(
-          text.includes(word)
-        ){
-
-          status =
-          word;
-
-          break;
-
-        }
-
-      }
-
-
-    }
-
-
-
     message =
-
-      "🎫 ローチケ監視結果\n\n"
-
+      "✅ 接続テスト成功\n\n"
       +
-
-      status
-
+      "タイトル:\n"
       +
-
-      "\n\n"
-
-      +
-
-      url;
+      title;
 
 
-
-  }catch(e){
-
-
-    message =
-
-      "❌ ローチケ監視エラー\n\n"
-
-      +
-
-      e.message;
-
+  }
+  catch(error) {
 
 
     console.log(
-      e.message
+      "エラー:",
+      error.message
     );
+
+
+    message =
+      "❌ 接続テスト失敗\n\n"
+      +
+      error.message;
 
 
   }
 
 
 
-  await sendDiscord(
-    webhook,
-    message
-  );
-
+  console.log(message);
 
 
   await browser.close();
 
 
 }
-
-
-
-async function sendDiscord(
-  webhook,
-  content
-){
-
-
-  if(!webhook){
-    return;
-  }
-
-
-
-  await fetch(
-
-    webhook,
-
-    {
-
-      method:"POST",
-
-      headers:{
-        "Content-Type":
-        "application/json"
-      },
-
-      body:
-      JSON.stringify({
-
-        content:
-        content
-
-      })
-
-    }
-
-  );
-
-
-}
-
 
 
 main();
