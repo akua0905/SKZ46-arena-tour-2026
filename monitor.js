@@ -4,63 +4,58 @@ const url =
 "https://l-tike.com/concert/mevent/?mid=366800";
 
 
+function getPage(){
+
+return new Promise((resolve,reject)=>{
+
+
 const req = https.get(
-  url,
-  {
-    headers:{
-      "User-Agent":"Mozilla/5.0",
-      "Connection":"close"
-    }
-  },
-  (res)=>{
 
-    console.log("Status:", res.statusCode);
+url,
 
-    let html="";
+{
+headers:{
 
-    res.on("data", chunk=>{
-      html += chunk;
-    });
+"User-Agent":
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
 
-    res.on("end", ()=>{
+"Accept-Language":
+"ja,en-US;q=0.9,en;q=0.8"
 
-      console.log("取得完了");
-      console.log("文字数:", html.length);
+}
 
-      const words=[
-        "千葉県",
-        "ＬａＬａ",
-        "TOKYO",
-        "arena"
-      ];
+},
 
-      for(const word of words){
+(res)=>{
 
-        const index =
-          html.indexOf(word);
 
-        console.log(
-          word,
-          "位置:",
-          index
-        );
+console.log(
+"Status:",
+res.statusCode
+);
 
-        if(index !== -1){
 
-          console.log(
-            html.substring(
-              index-500,
-              index+1000
-            )
-          );
+let html="";
 
-        }
 
-      }
+res.on(
+"data",
+chunk=>{
+html+=chunk;
+}
+);
 
-    });
 
-  }
+res.on(
+"end",
+()=>{
+resolve(html);
+}
+);
+
+
+}
+
 );
 
 
@@ -68,22 +63,99 @@ req.setTimeout(
 30000,
 ()=>{
 
-  console.log(
-    "30秒タイムアウト"
-  );
+req.destroy();
 
-  req.destroy();
+reject(
+new Error(
+"timeout"
+)
+);
 
 });
 
 
 req.on(
 "error",
-(err)=>{
+reject
+);
 
-  console.log(
-    "エラー:",
-    err.message
-  );
 
 });
+
+}
+
+
+
+async function main(){
+
+try{
+
+
+console.log(
+"取得開始"
+);
+
+
+const html =
+await getPage();
+
+
+console.log(
+"取得成功"
+);
+
+
+console.log(
+"文字数:",
+html.length
+);
+
+
+
+for(
+const word of [
+"千葉県",
+"ＬａＬａ",
+"TOKYO",
+"arena"
+]
+){
+
+const index =
+html.indexOf(word);
+
+
+console.log(
+word,
+index
+);
+
+
+if(index !== -1){
+
+console.log(
+html.substring(
+index-500,
+index+1000
+)
+);
+
+}
+
+
+}
+
+
+}catch(e){
+
+console.log(
+"エラー:",
+e.message
+);
+
+}
+
+}
+
+
+main();
