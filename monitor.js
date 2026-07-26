@@ -1,4 +1,4 @@
-// monitor.js 完成版⑩ コード①
+// monitor.js 完成版⑪ コード①
 
 import fs from "fs";
 
@@ -11,20 +11,33 @@ process.env.DISCORD_WEBHOOK;
 const DATA_FILE =
 "ticket_list.txt";
 
-const NOTICE_FILE =
-"last_notice.txt";
 
-const NO_CHANGE_INTERVAL =
-30 * 60 * 1000;
+// 日本時間
+function nowJP(){
+
+    return new Date().toLocaleString(
+        "ja-JP",
+        {
+            timeZone:"Asia/Tokyo"
+        }
+    );
+
+}
 
 
-// Discord通知
+// Discord送信
 async function sendDiscord(message){
 
     if(!DISCORD_WEBHOOK){
-        console.log("Webhook未設定");
+
+        console.log(
+            "Webhook未設定"
+        );
+
         return;
+
     }
+
 
     try{
 
@@ -42,9 +55,11 @@ async function sendDiscord(message){
             }
         );
 
+
         console.log(
             "Discord送信完了"
         );
+
 
     }catch(e){
 
@@ -59,7 +74,7 @@ async function sendDiscord(message){
 
 
 
-// ローチケ取得
+// HTML取得
 async function getHTML(){
 
     for(
@@ -86,13 +101,16 @@ async function getHTML(){
             );
 
 
+
             const response =
             await fetch(
                 TARGET_URL,
                 {
+
                     method:"GET",
 
                     headers:{
+
                         "User-Agent":
                         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
 
@@ -104,10 +122,12 @@ async function getHTML(){
 
                         "Cache-Control":
                         "no-cache"
+
                     },
 
                     signal:
                     controller.signal
+
                 }
             );
 
@@ -123,7 +143,6 @@ async function getHTML(){
                 );
 
             }
-
 
 
             console.log(
@@ -164,7 +183,7 @@ async function getHTML(){
 
 
 
-// HTML整形
+// HTMLから不要部分削除
 function cleanHTML(html){
 
     return html
@@ -198,7 +217,7 @@ function cleanHTML(html){
 
 
 
-// チケット抽出
+// チケット一覧抽出
 function extractTickets(html){
 
     const text =
@@ -235,15 +254,14 @@ ${match[4]}`
 }
 
 
-// monitor.js 完成版⑩ コード②
-
-
-function getDiff(oldText,newList){
+// 差分確認
+function getDiff(oldText, newList){
 
     const oldItems =
     oldText.split("\n\n");
 
-    const changes=[];
+
+    const changes = [];
 
 
     for(const newItem of newList){
@@ -276,9 +294,16 @@ function getDiff(oldText,newList){
         );
 
 
-        if(!date || !area || !newStatus){
+        if(
+            !date ||
+            !area ||
+            !newStatus
+        ){
+
             continue;
+
         }
+
 
 
         const oldItem =
@@ -290,9 +315,13 @@ function getDiff(oldText,newList){
         );
 
 
+
         if(!oldItem){
+
             continue;
+
         }
+
 
 
         const oldStatus =
@@ -302,6 +331,7 @@ function getDiff(oldText,newList){
             x =>
             x.startsWith("状態:")
         );
+
 
 
         if(
@@ -329,35 +359,10 @@ ${newStatus.replace("状態:","")}`
 
 
 
-function canSendNoChange(){
 
-    if(
-        !fs.existsSync(NOTICE_FILE)
-    ){
-        return true;
-    }
-
-
-    const last =
-    Number(
-        fs.readFileSync(
-            NOTICE_FILE,
-            "utf8"
-        )
-    );
-
-
-    return (
-        Date.now()-last
-        >=
-        NO_CHANGE_INTERVAL
-    );
-
-}
-
-
-
+// メイン処理
 async function main(){
+
 
     console.log(
         "===================="
@@ -366,7 +371,7 @@ async function main(){
 
     console.log(
         "実行時刻:",
-        new Date().toLocaleString("ja-JP")
+        nowJP()
     );
 
 
@@ -375,20 +380,24 @@ async function main(){
     );
 
 
+
     let html;
+
 
 
     try{
 
+
         html =
         await getHTML();
+
 
 
     }catch(e){
 
 
         console.log(
-            "最終取得失敗:",
+            "取得最終失敗:",
             e.message
         );
 
@@ -398,9 +407,11 @@ async function main(){
 
 取得失敗
 
-${e.message}
+時刻:
+${nowJP()}
 
-次回実行で再確認します。`
+原因:
+${e.message}`
         );
 
 
@@ -449,7 +460,8 @@ ${e.message}
 
 
 
-    let oldText="";
+    let oldText = "";
+
 
 
     if(
@@ -466,6 +478,7 @@ ${e.message}
 
 
 
+    // 初回
     if(!oldText){
 
 
@@ -473,6 +486,25 @@ ${e.message}
             DATA_FILE,
             currentText
         );
+
+
+
+        await sendDiscord(
+`🆕 ローチケ監視開始
+
+初回データ登録
+
+時刻:
+${nowJP()}
+
+現在状態:
+
+${currentText}
+
+確認:
+${TARGET_URL}`
+        );
+
 
 
         console.log(
@@ -507,9 +539,11 @@ ${e.message}
 
 ${diff}
 
+時刻:
+${nowJP()}
+
 確認:
 ${TARGET_URL}`
-
         );
 
 
@@ -521,46 +555,24 @@ ${TARGET_URL}`
     }else{
 
 
-        console.log(
-            "変更なし"
-        );
-
-
-        if(
-            canSendNoChange()
-        ){
-
-
-            await sendDiscord(
+        await sendDiscord(
 
 `✅ ローチケ監視
 
 変更なし
 
-実行:
-${new Date().toLocaleString("ja-JP")}`
+時刻:
+${nowJP()}
 
-            );
-
-
-            fs.writeFileSync(
-                NOTICE_FILE,
-                String(Date.now())
-            );
+確認:
+${TARGET_URL}`
+        );
 
 
-            console.log(
-                "変更なし通知送信"
-            );
+        console.log(
+            "変更なし通知送信"
+        );
 
-
-        }else{
-
-            console.log(
-                "変更なし通知スキップ"
-            );
-
-        }
 
     }
 
@@ -580,6 +592,7 @@ main()
 .catch(
     async e=>{
 
+
         console.error(
             "予期せぬエラー:",
             e.message
@@ -589,8 +602,12 @@ main()
         await sendDiscord(
 `⚠️ ローチケ監視エラー
 
+時刻:
+${nowJP()}
+
 ${e.message}`
         );
+
 
     }
 );
