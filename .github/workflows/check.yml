@@ -1,33 +1,43 @@
-name: check
+name: Lawson Ticket Monitor
 
 on:
-  workflow_dispatch:
   schedule:
     - cron: "*/5 * * * *"
+
+  workflow_dispatch:
 
 
 jobs:
 
-  check:
+  monitor:
 
     runs-on: ubuntu-latest
 
 
     steps:
 
-    - name: checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
 
-    - name: setup node
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
 
-    - name: run monitor
-      env:
-        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Install packages
+        run: npm install
 
-      run: |
-        node monitor.js
+
+      - name: Run monitor
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: node monitor.js
+
+
+      - name: Save status
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "Update ticket status"
+          add: status.json
