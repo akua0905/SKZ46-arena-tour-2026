@@ -1,4 +1,4 @@
-name: Ticket Monitor
+name: Lawson Ticket Monitor
 
 on:
   schedule:
@@ -46,5 +46,3 @@ jobs:
           message: "Update ticket monitor data"
           add: |
             ticket_list.txt
-            last_notice.txt
-　
