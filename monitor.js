@@ -1,27 +1,23 @@
-// ==========================================
-// ローチケ チケット一覧監視版⑤
-// 公演カード抽出版
-// ==========================================
-
 import fs from "fs";
-
 
 const TARGET_URL =
 "https://l-tike.com/concert/mevent/?mid=366800";
 
-
 const DISCORD_WEBHOOK =
 process.env.DISCORD_WEBHOOK;
-
 
 const DATA_FILE =
 "ticket_list.txt";
 
+const NOTICE_FILE =
+"last_notice.txt";
 
 
-// ==============================
-// Discord通知
-// ==============================
+// 変更なし通知間隔（30分）
+const NO_CHANGE_INTERVAL =
+30 * 60 * 1000;
+
+
 
 async function sendDiscord(message){
 
@@ -43,59 +39,78 @@ async function sendDiscord(message){
             })
         }
     );
-
 }
 
 
 
-// ==============================
 // HTML取得
-// ==============================
 
 async function getHTML(){
 
+    for(let i=1;i<=3;i++){
 
-    const res =
-    await fetch(
-        TARGET_URL,
-        {
-            headers:{
+        try{
 
-                "User-Agent":
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1"
+            console.log(
+                `取得試行 ${i}/3`
+            );
+
+
+            const res =
+            await fetch(
+                TARGET_URL,
+                {
+                    headers:{
+                        "User-Agent":
+                        "Mozilla/5.0"
+                    }
+                }
+            );
+
+
+            if(!res.ok){
+
+                throw new Error(
+                    `HTTP ${res.status}`
+                );
 
             }
+
+
+            return await res.text();
+
+
+        }catch(e){
+
+            console.log(
+                e.message
+            );
+
+
+            if(i===3){
+                throw e;
+            }
+
+
+            await new Promise(
+                r=>setTimeout(r,5000)
+            );
+
         }
-    );
-
-
-    if(!res.ok){
-
-        throw new Error(
-            `HTTP ${res.status}`
-        );
 
     }
-
-
-    return await res.text();
 
 }
 
 
 
-// ==============================
-// HTML整理
-// ==============================
+// HTML整形
 
 function cleanHTML(html){
 
 
     let text = html;
 
-
-
-    // script削除
 
     text =
     text.replace(
@@ -110,9 +125,6 @@ function cleanHTML(html){
         ""
     );
 
-
-
-    // タグ削除
 
     text =
     text.replace(
@@ -141,9 +153,7 @@ function cleanHTML(html){
 
 
 
-// ==============================
-// 公演情報抽出
-// ==============================
+// チケット一覧抽出
 
 function extractTickets(html){
 
@@ -153,50 +163,36 @@ function extractTickets(html){
 
 
 
-    const results = [];
+    const regex =
+    /(\d{1,2}\.\d{1,2}.*?)(兵庫県|広島県|千葉県|宮城県|香川県).*?(発売中|予定枚数終了|発売前|受付終了).*?(一般発売.*?先着)/g;
 
 
 
-    const patterns = [
-
-        /(\d{1,2}\.\d{1,2}.*?)(兵庫県|広島県|千葉県|宮城県|香川県).*?(発売中|予定枚数終了|発売前|受付終了).*?(一般発売.*?先着)/g
-
-    ];
+    let result=[];
 
 
+    let match;
 
-    for(
-        const regex of patterns
+
+    while(
+        (match = regex.exec(text))
     ){
 
+        result.push(
 
-        let match;
-
-
-        while(
-            (match = regex.exec(text))
-        ){
-
-
-            results.push(
-
-`${match[1]}
+`${match[1].trim()}
 ${match[2]}
 状態:${match[3]}
 ${match[4]}`
 
-            );
-
-        }
+        );
 
     }
 
 
 
-    // 重複削除
-
     return [
-        ...new Set(results)
+        ...new Set(result)
     ]
     .join("\n\n");
 
@@ -204,42 +200,98 @@ ${match[4]}`
 
 
 
-// ==============================
-// 差分
-// ==============================
+// 差分取得
 
-function makeMessage(oldText,newText){
+function getDiff(oldText,newText){
 
 
-    return `🎫 ローチケ更新検知
+    const oldList =
+    oldText.split("\n\n");
 
-櫻坂46 ARENA TOUR 2026
 
-変更前:
-${oldText.substring(0,1000)}
+    const newList =
+    newText.split("\n\n");
 
-↓
 
-変更後:
-${newText.substring(0,1000)}
+    const diff=[];
 
-確認:
-${TARGET_URL}`;
+
+    for(
+        const item of newList
+    ){
+
+        if(
+            !oldList.includes(item)
+        ){
+
+            diff.push(item);
+
+        }
+
+    }
+
+
+    return diff.join("\n\n");
 
 }
 
 
 
-// ==============================
+// 変更なし通知判定
+
+function canSendNoChange(){
+
+
+    if(
+        !fs.existsSync(NOTICE_FILE)
+    ){
+
+        return true;
+
+    }
+
+
+    const last =
+    Number(
+        fs.readFileSync(
+            NOTICE_FILE,
+            "utf8"
+        )
+    );
+
+
+    return (
+        Date.now()-last
+        >=
+        NO_CHANGE_INTERVAL
+    );
+
+}
+
+
+
 // メイン
-// ==============================
 
 async function main(){
+
+
+    const now =
+    new Date()
+    .toLocaleString(
+        "ja-JP"
+    );
+
+
+    console.log(
+        "実行時刻:",
+        now
+    );
 
 
     console.log(
         "ローチケ取得開始"
     );
+
 
 
     const html =
@@ -254,16 +306,15 @@ async function main(){
 
 
 
-    const ticketList =
+    const current =
     extractTickets(html);
 
 
 
     console.log(
         "抽出文字数:",
-        ticketList.length
+        current.length
     );
-
 
 
     console.log(
@@ -272,7 +323,7 @@ async function main(){
 
 
     console.log(
-        ticketList
+        current
     );
 
 
@@ -282,15 +333,7 @@ async function main(){
 
 
 
-    console.log(
-        "保存ファイル存在:",
-        fs.existsSync(DATA_FILE)
-    );
-
-
-
-    let old = "";
-
+    let old="";
 
 
     if(
@@ -307,12 +350,14 @@ async function main(){
 
 
 
+    // 初回
+
     if(!old){
 
 
         fs.writeFileSync(
             DATA_FILE,
-            ticketList
+            current
         );
 
 
@@ -327,30 +372,89 @@ async function main(){
 
 
 
+    // 変更あり
+
     if(
-        old !== ticketList
+        old !== current
     ){
 
 
-        console.log(
-            "変更検知"
+        const diff =
+        getDiff(
+            old,
+            current
         );
+
 
 
         await sendDiscord(
-            makeMessage(
-                old,
-                ticketList
-            )
+
+`🎫 ローチケ更新検知
+
+櫻坂46 ARENA TOUR 2026
+
+変更内容:
+
+${diff}
+
+確認:
+${TARGET_URL}`
+
         );
 
-
-    }else{
 
 
         console.log(
-            "変更なし"
+            "変更通知送信"
         );
+
+    }
+
+
+
+    // 変更なし
+
+    else{
+
+
+        if(
+            canSendNoChange()
+        ){
+
+
+            await sendDiscord(
+
+`✅ ローチケ監視
+
+変更なし
+
+実行時刻:
+${now}`
+
+            );
+
+
+            fs.writeFileSync(
+                NOTICE_FILE,
+                String(Date.now())
+            );
+
+
+            console.log(
+                "変更なし通知送信"
+            );
+
+
+        }
+        else{
+
+
+            console.log(
+                "変更なし（通知スキップ）"
+            );
+
+
+        }
 
     }
 
@@ -358,7 +462,7 @@ async function main(){
 
     fs.writeFileSync(
         DATA_FILE,
-        ticketList
+        current
     );
 
 
@@ -368,15 +472,20 @@ async function main(){
 
 main()
 .catch(
-    async error=>{
+    async e=>{
 
-        console.error(error);
+
+        console.error(e);
+
 
         await sendDiscord(
+
 `⚠️ ローチケ監視エラー
 
-${error.message}`
+${e.message}`
+
         );
+
 
         process.exit(1);
 
