@@ -1,26 +1,18 @@
 // ==========================================
-// ローチケ チケット一覧差分監視版
-// GitHub Actions / Node.js対応
+// ローチケ チケット一覧監視版
+// 完成版③ 修正版
 // ==========================================
 
 import fs from "fs";
 
-
-// ==============================
-// 設定
-// ==============================
-
 const TARGET_URL =
 "https://l-tike.com/concert/mevent/?mid=366800";
-
 
 const DISCORD_WEBHOOK =
 process.env.DISCORD_WEBHOOK;
 
-
 const DATA_FILE =
 "ticket_list.txt";
-
 
 
 // ==============================
@@ -34,7 +26,6 @@ async function sendDiscord(message){
         return;
     }
 
-
     await fetch(
         DISCORD_WEBHOOK,
         {
@@ -47,9 +38,7 @@ async function sendDiscord(message){
             })
         }
     );
-
 }
-
 
 
 // ==============================
@@ -58,138 +47,195 @@ async function sendDiscord(message){
 
 async function getHTML(){
 
+    for(let i=1;i<=3;i++){
 
-    const res =
-    await fetch(
-        TARGET_URL,
-        {
-            headers:{
+        try{
 
-                "User-Agent":
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
+            console.log(
+                `取得試行 ${i}/3`
+            );
 
-                "Accept":
-                "text/html,application/xhtml+xml"
+            const controller =
+            new AbortController();
+
+
+            const timer =
+            setTimeout(
+                ()=>controller.abort(),
+                60000
+            );
+
+
+            const res =
+            await fetch(
+                TARGET_URL,
+                {
+                    signal:controller.signal,
+
+                    headers:{
+                        "User-Agent":
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
+
+                        "Accept":
+                        "text/html,application/xhtml+xml"
+                    }
+                }
+            );
+
+
+            clearTimeout(timer);
+
+
+            if(!res.ok){
+
+                throw new Error(
+                    `HTTP ${res.status}`
+                );
 
             }
+
+
+            return await res.text();
+
+
+        }catch(e){
+
+            console.log(
+                "取得失敗:",
+                e.message
+            );
+
+
+            if(i===3){
+                throw e;
+            }
+
+
+            await new Promise(
+                r=>setTimeout(r,5000)
+            );
+
         }
-    );
-
-
-    if(!res.ok){
-
-        throw new Error(
-            `HTTP ${res.status}`
-        );
 
     }
-
-
-    return await res.text();
 
 }
 
 
-
 // ==============================
-// チケット一覧抽出
+// チケット情報抽出
 // ==============================
 
 function extractTicketList(html){
 
 
-    let start =
-    html.indexOf(
-        "チケット一覧"
-    );
+    let result = "";
 
 
-    if(start === -1){
 
-        console.log(
-            "チケット一覧開始位置なし"
-        );
+    // 状態ワード周辺を抽出
 
-        start = 0;
+    const keywords = [
+        "予定枚数終了",
+        "発売中",
+        "発売前",
+        "受付終了",
+        "販売中",
+        "一般発売先着",
+        "選択する"
+    ];
+
+
+
+    for(const key of keywords){
+
+
+        let index = 0;
+
+
+        while(true){
+
+
+            index =
+            html.indexOf(
+                key,
+                index
+            );
+
+
+            if(index === -1){
+                break;
+            }
+
+
+            const start =
+            Math.max(
+                0,
+                index - 500
+            );
+
+
+            const end =
+            Math.min(
+                html.length,
+                index + 500
+            );
+
+
+            result +=
+            html.substring(
+                start,
+                end
+            )
+            + "\n";
+
+
+            index += key.length;
+
+        }
 
     }
 
 
 
-    let end =
-    html.indexOf(
-        "選択する",
-        start
-    );
+    // HTML除去
 
-
-    if(end === -1){
-
-        end =
-        start + 50000;
-
-    }
-    else{
-
-        end += 5000;
-
-    }
-
-
-
-    let area =
-    html.substring(
-        start,
-        end
-    );
-
-
-
-    // HTMLタグ除去
-
-    area =
-    area.replace(
+    result =
+    result.replace(
         /<script[\s\S]*?<\/script>/gi,
         ""
     );
 
 
-    area =
-    area.replace(
+    result =
+    result.replace(
         /<style[\s\S]*?<\/style>/gi,
         ""
     );
 
 
-    area =
-    area.replace(
+    result =
+    result.replace(
         /<[^>]+>/g,
         " "
     );
 
 
-
-    // HTMLエンティティ整理
-
-    area =
-    area.replace(
+    result =
+    result.replace(
         /&nbsp;/g,
         " "
     );
 
 
-
-    // 空白整理
-
-    area =
-    area.replace(
+    result =
+    result.replace(
         /\s+/g,
         " "
     );
 
 
-
-    return area.trim();
+    return result.trim();
 
 }
 
@@ -199,67 +245,24 @@ function extractTicketList(html){
 // 差分作成
 // ==============================
 
-function createDiff(oldText,newText){
+function diff(oldText,newText){
 
 
-    const oldLines =
-    oldText.split(" ");
+    if(!oldText){
 
-
-    const newLines =
-    newText.split(" ");
-
-
-
-    let removed = [];
-
-    let added = [];
-
-
-
-    for(
-        const item of oldLines
-    ){
-
-        if(
-            !newLines.includes(item)
-            &&
-            item.length > 1
-        ){
-
-            removed.push(item);
-
-        }
+        return {
+            before:"",
+            after:newText
+        };
 
     }
-
-
-
-    for(
-        const item of newLines
-    ){
-
-        if(
-            !oldLines.includes(item)
-            &&
-            item.length > 1
-        ){
-
-            added.push(item);
-
-        }
-
-    }
-
 
 
     return {
 
-        removed:
-        [...new Set(removed)].slice(0,30),
+        before:oldText,
 
-        added:
-        [...new Set(added)].slice(0,30)
+        after:newText
 
     };
 
@@ -279,10 +282,8 @@ async function main(){
     );
 
 
-
     const html =
     await getHTML();
-
 
 
     console.log(
@@ -298,14 +299,31 @@ async function main(){
 
 
     console.log(
-        "チケット一覧文字数:",
+        "抽出文字数:",
         ticketList.length
     );
 
 
+    console.log(
+        "===== 抽出結果 ====="
+    );
 
-    let old = "";
 
+    console.log(
+        ticketList.substring(
+            0,
+            2000
+        )
+    );
+
+
+    console.log(
+        "===================="
+    );
+
+
+
+    let old="";
 
 
     if(
@@ -347,25 +365,24 @@ async function main(){
     ){
 
 
-        const diff =
-        createDiff(
-            old,
-            ticketList
+        console.log(
+            "変更検知"
         );
 
 
-
-        let message =
+        const message =
 
 `🎫 ローチケ更新検知
 
 櫻坂46 ARENA TOUR 2026
 
-【変更前】
-${diff.removed.join(" ") || "なし"}
+変更前:
+${old.substring(0,800)}
 
-【変更後】
-${diff.added.join(" ") || "なし"}
+↓
+
+変更後:
+${ticketList.substring(0,800)}
 
 確認:
 ${TARGET_URL}`;
@@ -377,13 +394,7 @@ ${TARGET_URL}`;
         );
 
 
-        console.log(
-            "変更通知送信"
-        );
-
-
-    }
-    else{
+    }else{
 
 
         console.log(
@@ -399,24 +410,21 @@ ${TARGET_URL}`;
         ticketList
     );
 
-
 }
 
 
 
 main()
 .catch(
-    async error=>{
+    async e=>{
 
-        console.error(error);
-
+        console.error(e);
 
         await sendDiscord(
 `⚠️ ローチケ監視エラー
 
-${error.message}`
+${e.message}`
         );
-
 
         process.exit(1);
 
