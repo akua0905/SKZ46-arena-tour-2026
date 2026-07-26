@@ -1,3 +1,5 @@
+// monitor.js 完成版⑨ コード①
+
 import fs from "fs";
 
 const TARGET_URL =
@@ -16,7 +18,7 @@ const NO_CHANGE_INTERVAL =
 30 * 60 * 1000;
 
 
-
+// Discord通知
 async function sendDiscord(message){
 
     if(!DISCORD_WEBHOOK){
@@ -24,17 +26,14 @@ async function sendDiscord(message){
         return;
     }
 
-
     const controller =
     new AbortController();
-
 
     const timer =
     setTimeout(
         ()=>controller.abort(),
         10000
     );
-
 
     try{
 
@@ -49,15 +48,14 @@ async function sendDiscord(message){
                 body:JSON.stringify({
                     content:message
                 }),
-                signal:controller.signal
+                signal:
+                controller.signal
             }
         );
-
 
         console.log(
             "Discord送信完了"
         );
-
 
     }catch(e){
 
@@ -65,7 +63,6 @@ async function sendDiscord(message){
             "Discord送信失敗:",
             e.message
         );
-
 
     }finally{
 
@@ -76,10 +73,8 @@ async function sendDiscord(message){
 }
 
 
-
-
+// ローチケ取得
 async function getHTML(){
-
 
     for(
         let i=1;
@@ -111,7 +106,7 @@ async function getHTML(){
                 {
                     headers:{
                         "User-Agent":
-                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"
+                        "Mozilla/5.0"
                     },
                     signal:
                     controller.signal
@@ -120,7 +115,6 @@ async function getHTML(){
 
 
             clearTimeout(timer);
-
 
 
             if(!res.ok){
@@ -132,17 +126,10 @@ async function getHTML(){
             }
 
 
-            console.log(
-                "HTML取得完了"
-            );
-
-
             return await res.text();
 
 
-
         }catch(e){
-
 
             console.log(
                 "取得失敗:",
@@ -153,9 +140,7 @@ async function getHTML(){
             if(
                 i===3
             ){
-
                 throw e;
-
             }
 
 
@@ -170,75 +155,48 @@ async function getHTML(){
 }
 
 
-
-
+// HTML整形
 function cleanHTML(html){
 
-
-    let text =
-    html;
-
-
-    text =
-    text.replace(
+    return html
+    .replace(
         /<script[\s\S]*?<\/script>/gi,
         ""
-    );
-
-
-    text =
-    text.replace(
+    )
+    .replace(
         /<style[\s\S]*?<\/style>/gi,
         ""
-    );
-
-
-    text =
-    text.replace(
+    )
+    .replace(
         /<[^>]+>/g,
         " "
-    );
-
-
-    text =
-    text.replace(
+    )
+    .replace(
         /&nbsp;/g,
         " "
-    );
-
-
-    text =
-    text.replace(
+    )
+    .replace(
         /\s+/g,
         " "
     );
 
-
-    return text;
-
 }
 
 
-
-
-
+// チケット一覧抽出
 function extractTickets(html){
-
 
     const text =
     cleanHTML(html);
-
 
 
     const regex =
     /(\d{1,2}\.\d{1,2}.*?)(兵庫県|広島県|千葉県|宮城県|香川県).*?(発売中|予定枚数終了|発売前|受付終了).*?(一般発売.*?先着)/g;
 
 
-
-    let result=[];
+    const result=[];
 
     let match;
-
 
 
     while(
@@ -246,77 +204,126 @@ function extractTickets(html){
     ){
 
         result.push(
-
 `${match[1].trim()}
 ${match[2]}
 状態:${match[3]}
 ${match[4]}`
-
         );
 
     }
 
 
-
     return [
         ...new Set(result)
-    ]
-    .join("\n\n");
+    ];
 
 }
 
+// 状態変化検出
+function getDiff(oldText,newList){
 
-
-
-
-function getDiff(oldText,newText){
-
-
-    const oldList =
+    const oldItems =
     oldText.split("\n\n");
 
 
-    const newList =
-    newText.split("\n\n");
+    const changes=[];
 
 
-    const diff=[];
+    for(const newItem of newList){
+
+        const newLines =
+        newItem.split("\n");
 
 
-    for(
-        const item of newList
-    ){
+        const date =
+        newLines[0];
+
+
+        const area =
+        newLines.find(
+            x =>
+            [
+                "兵庫県",
+                "広島県",
+                "千葉県",
+                "宮城県",
+                "香川県"
+            ].includes(x)
+        );
+
+
+        const newStatus =
+        newLines.find(
+            x =>
+            x.startsWith("状態:")
+        );
+
+
+        if(!date || !area || !newStatus){
+            continue;
+        }
+
+
+
+        const oldItem =
+        oldItems.find(
+            x =>
+            x.includes(date)
+            &&
+            x.includes(area)
+        );
+
+
+
+        if(!oldItem){
+            continue;
+        }
+
+
+
+        const oldStatus =
+        oldItem
+        .split("\n")
+        .find(
+            x =>
+            x.startsWith("状態:")
+        );
+
+
 
         if(
-            !oldList.includes(item)
+            oldStatus &&
+            oldStatus !== newStatus
         ){
 
-            diff.push(item);
+            changes.push(
+`${area}
+${date}
+
+${oldStatus.replace("状態:","")}
+↓
+${newStatus.replace("状態:","")}`
+            );
 
         }
 
     }
 
 
-    return diff.join("\n\n");
+    return changes.join("\n\n");
 
 }
 
 
 
-
-
+// 30分通知判定
 function canSendNoChange(){
-
 
     if(
         !fs.existsSync(NOTICE_FILE)
     ){
-
         return true;
-
     }
-
 
 
     const last =
@@ -326,7 +333,6 @@ function canSendNoChange(){
             "utf8"
         )
     );
-
 
 
     return (
@@ -339,17 +345,8 @@ function canSendNoChange(){
 
 
 
-
-
+// メイン処理
 async function main(){
-
-
-    const now =
-    new Date()
-    .toLocaleString(
-        "ja-JP"
-    );
-
 
     console.log(
         "===================="
@@ -358,7 +355,7 @@ async function main(){
 
     console.log(
         "実行時刻:",
-        now
+        new Date().toLocaleString("ja-JP")
     );
 
 
@@ -367,10 +364,8 @@ async function main(){
     );
 
 
-
     const html =
     await getHTML();
-
 
 
     console.log(
@@ -379,15 +374,13 @@ async function main(){
     );
 
 
-
-    const current =
+    const currentList =
     extractTickets(html);
-
 
 
     console.log(
         "抽出文字数:",
-        current.length
+        currentList.join("\n\n").length
     );
 
 
@@ -397,7 +390,7 @@ async function main(){
 
 
     console.log(
-        current
+        currentList.join("\n\n")
     );
 
 
@@ -407,7 +400,12 @@ async function main(){
 
 
 
-    let old="";
+    const currentText =
+    currentList.join("\n\n");
+
+
+
+    let oldText="";
 
 
 
@@ -415,7 +413,7 @@ async function main(){
         fs.existsSync(DATA_FILE)
     ){
 
-        old =
+        oldText =
         fs.readFileSync(
             DATA_FILE,
             "utf8"
@@ -425,13 +423,13 @@ async function main(){
 
 
 
-
-    if(!old){
-
+    if(
+        !oldText
+    ){
 
         fs.writeFileSync(
             DATA_FILE,
-            current
+            currentText
         );
 
 
@@ -446,18 +444,15 @@ async function main(){
 
 
 
+    const diff =
+    getDiff(
+        oldText,
+        currentList
+    );
 
 
-    if(
-        old !== current
-    ){
 
-
-        const diff =
-        getDiff(
-            old,
-            current
-        );
+    if(diff){
 
 
         await sendDiscord(
@@ -481,8 +476,7 @@ ${TARGET_URL}`
         );
 
 
-    }
-    else{
+    }else{
 
 
         console.log(
@@ -494,15 +488,14 @@ ${TARGET_URL}`
             canSendNoChange()
         ){
 
-
             await sendDiscord(
 
 `✅ ローチケ監視
 
 変更なし
 
-実行時刻:
-${now}`
+実行:
+${new Date().toLocaleString("ja-JP")}`
 
             );
 
@@ -518,8 +511,7 @@ ${now}`
             );
 
 
-        }
-        else{
+        }else{
 
             console.log(
                 "変更なし通知スキップ"
@@ -531,13 +523,10 @@ ${now}`
 
 
 
-
     fs.writeFileSync(
         DATA_FILE,
-        current
+        currentText
     );
-
-
 
 }
 
@@ -554,11 +543,9 @@ main()
 
 
         await sendDiscord(
-
 `⚠️ ローチケ監視エラー
 
 ${e.message}`
-
         );
 
 
