@@ -1,4 +1,4 @@
-// monitor.js 完成版⑨ コード①
+// monitor.js 完成版⑩ コード①
 
 import fs from "fs";
 
@@ -26,15 +26,6 @@ async function sendDiscord(message){
         return;
     }
 
-    const controller =
-    new AbortController();
-
-    const timer =
-    setTimeout(
-        ()=>controller.abort(),
-        10000
-    );
-
     try{
 
         await fetch(
@@ -47,9 +38,7 @@ async function sendDiscord(message){
                 },
                 body:JSON.stringify({
                     content:message
-                }),
-                signal:
-                controller.signal
+                })
             }
         );
 
@@ -64,13 +53,10 @@ async function sendDiscord(message){
             e.message
         );
 
-    }finally{
-
-        clearTimeout(timer);
-
     }
 
 }
+
 
 
 // ローチケ取得
@@ -96,18 +82,30 @@ async function getHTML(){
             const timer =
             setTimeout(
                 ()=>controller.abort(),
-                15000
+                30000
             );
 
 
-            const res =
+            const response =
             await fetch(
                 TARGET_URL,
                 {
+                    method:"GET",
+
                     headers:{
                         "User-Agent":
-                        "Mozilla/5.0"
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
+
+                        "Accept":
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+
+                        "Accept-Language":
+                        "ja-JP,ja;q=0.9",
+
+                        "Cache-Control":
+                        "no-cache"
                     },
+
                     signal:
                     controller.signal
                 }
@@ -117,16 +115,24 @@ async function getHTML(){
             clearTimeout(timer);
 
 
-            if(!res.ok){
+
+            if(!response.ok){
 
                 throw new Error(
-                    `HTTP ${res.status}`
+                    `HTTP ${response.status}`
                 );
 
             }
 
 
-            return await res.text();
+
+            console.log(
+                "HTML取得完了"
+            );
+
+
+            return await response.text();
+
 
 
         }catch(e){
@@ -140,7 +146,9 @@ async function getHTML(){
             if(
                 i===3
             ){
+
                 throw e;
+
             }
 
 
@@ -155,26 +163,32 @@ async function getHTML(){
 }
 
 
+
 // HTML整形
 function cleanHTML(html){
 
     return html
+
     .replace(
         /<script[\s\S]*?<\/script>/gi,
         ""
     )
+
     .replace(
         /<style[\s\S]*?<\/style>/gi,
         ""
     )
+
     .replace(
         /<[^>]+>/g,
         " "
     )
+
     .replace(
         /&nbsp;/g,
         " "
     )
+
     .replace(
         /\s+/g,
         " "
@@ -183,7 +197,8 @@ function cleanHTML(html){
 }
 
 
-// チケット一覧抽出
+
+// チケット抽出
 function extractTickets(html){
 
     const text =
@@ -219,12 +234,14 @@ ${match[4]}`
 
 }
 
-// 状態変化検出
+
+// monitor.js 完成版⑩ コード②
+
+
 function getDiff(oldText,newList){
 
     const oldItems =
     oldText.split("\n\n");
-
 
     const changes=[];
 
@@ -264,7 +281,6 @@ function getDiff(oldText,newList){
         }
 
 
-
         const oldItem =
         oldItems.find(
             x =>
@@ -274,11 +290,9 @@ function getDiff(oldText,newList){
         );
 
 
-
         if(!oldItem){
             continue;
         }
-
 
 
         const oldStatus =
@@ -288,7 +302,6 @@ function getDiff(oldText,newList){
             x =>
             x.startsWith("状態:")
         );
-
 
 
         if(
@@ -316,7 +329,6 @@ ${newStatus.replace("状態:","")}`
 
 
 
-// 30分通知判定
 function canSendNoChange(){
 
     if(
@@ -345,7 +357,6 @@ function canSendNoChange(){
 
 
 
-// メイン処理
 async function main(){
 
     console.log(
@@ -364,8 +375,39 @@ async function main(){
     );
 
 
-    const html =
-    await getHTML();
+    let html;
+
+
+    try{
+
+        html =
+        await getHTML();
+
+
+    }catch(e){
+
+
+        console.log(
+            "最終取得失敗:",
+            e.message
+        );
+
+
+        await sendDiscord(
+`⚠️ ローチケ監視
+
+取得失敗
+
+${e.message}
+
+次回実行で再確認します。`
+        );
+
+
+        return;
+
+    }
+
 
 
     console.log(
@@ -374,13 +416,20 @@ async function main(){
     );
 
 
+
     const currentList =
     extractTickets(html);
 
 
+
+    const currentText =
+    currentList.join("\n\n");
+
+
+
     console.log(
         "抽出文字数:",
-        currentList.join("\n\n").length
+        currentText.length
     );
 
 
@@ -390,7 +439,7 @@ async function main(){
 
 
     console.log(
-        currentList.join("\n\n")
+        currentText
     );
 
 
@@ -400,13 +449,7 @@ async function main(){
 
 
 
-    const currentText =
-    currentList.join("\n\n");
-
-
-
     let oldText="";
-
 
 
     if(
@@ -423,9 +466,8 @@ async function main(){
 
 
 
-    if(
-        !oldText
-    ){
+    if(!oldText){
+
 
         fs.writeFileSync(
             DATA_FILE,
@@ -488,6 +530,7 @@ ${TARGET_URL}`
             canSendNoChange()
         ){
 
+
             await sendDiscord(
 
 `✅ ローチケ監視
@@ -528,6 +571,7 @@ ${new Date().toLocaleString("ja-JP")}`
         currentText
     );
 
+
 }
 
 
@@ -537,7 +581,7 @@ main()
     async e=>{
 
         console.error(
-            "エラー:",
+            "予期せぬエラー:",
             e.message
         );
 
@@ -547,9 +591,6 @@ main()
 
 ${e.message}`
         );
-
-
-        process.exit(1);
 
     }
 );
