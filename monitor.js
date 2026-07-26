@@ -1,8 +1,14 @@
 // ==========================================
 // ローチケページ差分監視版
-// GitHub Actions版
+// Node.js / GitHub Actions対応
 // ==========================================
 
+import fs from "fs";
+
+
+// ==============================
+// 設定
+// ==============================
 
 const TARGET_URL =
 "https://l-tike.com/concert/mevent/?mid=366800";
@@ -16,15 +22,21 @@ const HASH_FILE =
 "page_hash.txt";
 
 
-// ==========================================
+
+// ==============================
 // Discord通知
-// ==========================================
+// ==============================
 
 async function sendDiscord(message){
 
     if(!DISCORD_WEBHOOK){
-        console.log("Webhook未設定");
+
+        console.log(
+            "Webhook未設定"
+        );
+
         return;
+
     }
 
 
@@ -45,56 +57,122 @@ async function sendDiscord(message){
 
 
 
-// ==========================================
-// HTML取得
-// ==========================================
+// ==============================
+// ページ取得
+// ==============================
 
 async function getHTML(){
 
 
-    const res =
-    await fetch(
-        TARGET_URL,
-        {
-            headers:{
+    for(
+        let i=1;
+        i<=3;
+        i++
+    ){
 
-                "User-Agent":
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
+        try{
 
-                "Accept":
-                "text/html,application/xhtml+xml"
+
+            console.log(
+                `取得試行 ${i}/3`
+            );
+
+
+            const controller =
+            new AbortController();
+
+
+            const timer =
+            setTimeout(
+                ()=>{
+                    controller.abort();
+                },
+                60000
+            );
+
+
+
+            const res =
+            await fetch(
+                TARGET_URL,
+                {
+                    signal:
+                    controller.signal,
+
+                    headers:{
+
+                        "User-Agent":
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1",
+
+                        "Accept":
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+
+                        "Accept-Language":
+                        "ja-JP,ja;q=0.9"
+
+                    }
+                }
+            );
+
+
+            clearTimeout(timer);
+
+
+
+            if(!res.ok){
+
+                throw new Error(
+                    `HTTP ${res.status}`
+                );
 
             }
+
+
+            return await res.text();
+
+
+
+        }catch(error){
+
+
+            console.log(
+                "取得失敗:",
+                error.message
+            );
+
+
+            if(i===3){
+
+                throw error;
+
+            }
+
+
+            await new Promise(
+                r=>setTimeout(r,5000)
+            );
+
         }
-    );
-
-
-    if(!res.ok){
-
-        throw new Error(
-            `HTTP ${res.status}`
-        );
 
     }
-
-
-    return await res.text();
 
 }
 
 
 
-// ==========================================
-// 不要部分除去
-// ==========================================
+// ==============================
+// 不要変化除去
+// ==============================
 
 function cleanHTML(html){
 
 
-    let text = html;
+    let text =
+    html;
 
 
-    // 改行削除
+    // 改行・空白整理
+
     text =
     text.replace(
         /\s+/g,
@@ -102,23 +180,25 @@ function cleanHTML(html){
     );
 
 
-    // 時刻・日時系除去
+
+    // 日時削除
 
     text =
     text.replace(
-        /\d{4}[-/]\d{1,2}[-/]\d{1,2}/g,
+        /\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/g,
         ""
     );
 
 
     text =
     text.replace(
-        /\d{1,2}:\d{2}:\d{2}/g,
+        /\d{1,2}:\d{2}(:\d{2})?/g,
         ""
     );
 
 
-    // Cookie・セッション系除去
+
+    // ランダム値削除
 
     text =
     text.replace(
@@ -134,46 +214,50 @@ function cleanHTML(html){
     );
 
 
+
     return text;
 
 }
 
 
 
-// ==========================================
-// 簡易ハッシュ
-// ==========================================
+// ==============================
+// ハッシュ生成
+// ==============================
 
-function hash(str){
+function createHash(text){
 
-    let h = 0;
+
+    let hash =
+    0;
 
 
     for(
         let i=0;
-        i<str.length;
+        i<text.length;
         i++
     ){
 
-        h =
-        ((h << 5) - h)
-        + str.charCodeAt(i);
+        hash =
+        ((hash << 5) - hash)
+        +
+        text.charCodeAt(i);
 
 
-        h |= 0;
+        hash |= 0;
 
     }
 
 
-    return h.toString();
+    return String(hash);
 
 }
 
 
 
-// ==========================================
-// 保存
-// ==========================================
+// ==============================
+// メイン
+// ==============================
 
 async function main(){
 
@@ -181,6 +265,7 @@ async function main(){
     console.log(
         "ローチケ取得開始"
     );
+
 
 
     const html =
@@ -201,7 +286,7 @@ async function main(){
 
 
     const currentHash =
-    hash(cleaned);
+    createHash(cleaned);
 
 
 
@@ -212,18 +297,22 @@ async function main(){
 
 
 
-    let oldHash = null;
+    let oldHash =
+    null;
 
 
 
-    try{
+    if(
+        fs.existsSync(
+            HASH_FILE
+        )
+    ){
 
         oldHash =
-        await Bun.file(
-            HASH_FILE
-        ).text();
-
-    }catch(e){
+        fs.readFileSync(
+            HASH_FILE,
+            "utf8"
+        );
 
     }
 
@@ -232,7 +321,7 @@ async function main(){
     if(!oldHash){
 
 
-        await Bun.write(
+        fs.writeFileSync(
             HASH_FILE,
             currentHash
         );
@@ -254,27 +343,29 @@ async function main(){
     ){
 
 
+        console.log(
+            "ページ変更検知"
+        );
+
+
+
         await sendDiscord(
 
 `🎫 ローチケ更新検知
 
 櫻坂46 ARENA TOUR 2026
 
-ページ内容に変更があります。
+ローチケページに変更がありました。
 
-確認:
+確認：
 ${TARGET_URL}`
 
         );
 
 
-        console.log(
-            "変更検知 通知送信"
-        );
-
-
     }
     else{
+
 
         console.log(
             "変更なし"
@@ -284,7 +375,7 @@ ${TARGET_URL}`
 
 
 
-    await Bun.write(
+    fs.writeFileSync(
         HASH_FILE,
         currentHash
     );
@@ -299,13 +390,17 @@ main()
     async error=>{
 
 
-        console.error(error);
+        console.error(
+            error
+        );
 
 
         await sendDiscord(
+
 `⚠️ ローチケ監視エラー
 
 ${error.message}`
+
         );
 
 
