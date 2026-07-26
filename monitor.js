@@ -1,6 +1,6 @@
 // ==========================================
-// ローチケ チケット一覧監視版④
-// 抽出精度改善版
+// ローチケ チケット一覧監視版⑤
+// 公演カード抽出版
 // ==========================================
 
 import fs from "fs";
@@ -55,113 +55,67 @@ async function sendDiscord(message){
 async function getHTML(){
 
 
-    for(let i=1;i<=3;i++){
+    const res =
+    await fetch(
+        TARGET_URL,
+        {
+            headers:{
 
-        try{
-
-            console.log(
-                `取得試行 ${i}/3`
-            );
-
-
-            const controller =
-            new AbortController();
-
-
-            const timer =
-            setTimeout(
-                ()=>controller.abort(),
-                60000
-            );
-
-
-            const res =
-            await fetch(
-                TARGET_URL,
-                {
-                    signal:controller.signal,
-
-                    headers:{
-
-                        "User-Agent":
-                        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
-
-                        "Accept":
-                        "text/html"
-
-                    }
-                }
-            );
-
-
-            clearTimeout(timer);
-
-
-            if(!res.ok){
-
-                throw new Error(
-                    `HTTP ${res.status}`
-                );
+                "User-Agent":
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1"
 
             }
-
-
-            return await res.text();
-
-
-
-        }catch(e){
-
-
-            console.log(
-                "取得失敗:",
-                e.message
-            );
-
-
-            if(i===3){
-                throw e;
-            }
-
-
-            await new Promise(
-                r=>setTimeout(r,5000)
-            );
-
         }
+    );
+
+
+    if(!res.ok){
+
+        throw new Error(
+            `HTTP ${res.status}`
+        );
 
     }
+
+
+    return await res.text();
 
 }
 
 
 
 // ==============================
-// チケット一覧抽出
+// HTML整理
 // ==============================
 
-function extractTicketList(html){
+function cleanHTML(html){
 
 
-    // JavaScript定義部分を除去
+    let text = html;
 
-    html =
-    html.replace(
+
+
+    // script削除
+
+    text =
+    text.replace(
         /<script[\s\S]*?<\/script>/gi,
         ""
     );
 
 
-    html =
-    html.replace(
-        /Codes\.[\s\S]*?};/g,
+    text =
+    text.replace(
+        /<style[\s\S]*?<\/style>/gi,
         ""
     );
 
 
 
-    let text =
-    html.replace(
+    // タグ削除
+
+    text =
+    text.replace(
         /<[^>]+>/g,
         " "
     );
@@ -181,91 +135,96 @@ function extractTicketList(html){
     );
 
 
+    return text;
 
-    const areas = [
+}
 
-        "兵庫県",
-        "広島県",
-        "千葉県",
-        "宮城県",
-        "香川県"
+
+
+// ==============================
+// 公演情報抽出
+// ==============================
+
+function extractTickets(html){
+
+
+    const text =
+    cleanHTML(html);
+
+
+
+    const results = [];
+
+
+
+    const patterns = [
+
+        /(\d{1,2}\.\d{1,2}.*?)(兵庫県|広島県|千葉県|宮城県|香川県).*?(発売中|予定枚数終了|発売前|受付終了).*?(一般発売.*?先着)/g
 
     ];
-
-
-
-    const statuses = [
-
-        "発売中",
-        "予定枚数終了",
-        "発売前",
-        "受付終了"
-
-    ];
-
-
-
-    let result = [];
 
 
 
     for(
-        const area of areas
+        const regex of patterns
     ){
 
 
-        let index =
-        text.indexOf(
-            area
-        );
+        let match;
 
 
-        if(index === -1){
-            continue;
+        while(
+            (match = regex.exec(text))
+        ){
+
+
+            results.push(
+
+`${match[1]}
+${match[2]}
+状態:${match[3]}
+${match[4]}`
+
+            );
+
         }
-
-
-
-        let block =
-        text.substring(
-            index,
-            index + 200
-        );
-
-
-
-        let status =
-        statuses.find(
-            s=>block.includes(s)
-        );
-
-
-
-        let sale =
-        block.includes(
-            "一般発売"
-        )
-        ?
-        "一般発売"
-        :
-        "";
-
-
-
-        result.push(
-
-`${block.substring(0,100)}
-状態:${status || "不明"}
-${sale}`
-
-        );
-
 
     }
 
 
 
-    return result.join("\n\n");
+    // 重複削除
+
+    return [
+        ...new Set(results)
+    ]
+    .join("\n\n");
+
+}
+
+
+
+// ==============================
+// 差分
+// ==============================
+
+function makeMessage(oldText,newText){
+
+
+    return `🎫 ローチケ更新検知
+
+櫻坂46 ARENA TOUR 2026
+
+変更前:
+${oldText.substring(0,1000)}
+
+↓
+
+変更後:
+${newText.substring(0,1000)}
+
+確認:
+${TARGET_URL}`;
 
 }
 
@@ -296,7 +255,7 @@ async function main(){
 
 
     const ticketList =
-    extractTicketList(html);
+    extractTickets(html);
 
 
 
@@ -304,6 +263,7 @@ async function main(){
         "抽出文字数:",
         ticketList.length
     );
+
 
 
     console.log(
@@ -377,28 +337,15 @@ async function main(){
         );
 
 
-
         await sendDiscord(
-
-`🎫 ローチケ更新検知
-
-櫻坂46 ARENA TOUR 2026
-
-変更前:
-${old.substring(0,1000)}
-
-↓
-
-変更後:
-${ticketList.substring(0,1000)}
-
-${TARGET_URL}`
-
+            makeMessage(
+                old,
+                ticketList
+            )
         );
 
 
-    }
-    else{
+    }else{
 
 
         console.log(
@@ -421,17 +368,15 @@ ${TARGET_URL}`
 
 main()
 .catch(
-    async e=>{
+    async error=>{
 
-        console.error(e);
-
+        console.error(error);
 
         await sendDiscord(
 `⚠️ ローチケ監視エラー
 
-${e.message}`
+${error.message}`
         );
-
 
         process.exit(1);
 
