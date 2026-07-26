@@ -47,3 +47,4 @@ jobs:
           add: |
             ticket_list.txt
             last_notice.txt
+　
