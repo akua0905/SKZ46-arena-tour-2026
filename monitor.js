@@ -1,10 +1,9 @@
 // ==========================================
 // ローチケ監視ツール
 // GitHub Actions版
-// monitor.js
+// monitor.js 改良版
 // ==========================================
 
-import axios from "axios";
 import fs from "fs";
 
 
@@ -16,17 +15,14 @@ const TARGET_URL =
 "https://l-tike.com/concert/mevent/?mid=366800";
 
 
-// 監視対象
 const TARGET_NAME =
 "千葉";
 
 
-// Discord
 const DISCORD_WEBHOOK =
 process.env.DISCORD_WEBHOOK;
 
 
-// 状態保存
 const STATUS_FILE =
 "status.json";
 
@@ -44,19 +40,36 @@ async function sendDiscord(message){
     }
 
 
-    await axios.post(
-        DISCORD_WEBHOOK,
-        {
-            content: message
-        }
-    );
+    try{
+
+        await fetch(
+            DISCORD_WEBHOOK,
+            {
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json"
+                },
+                body:JSON.stringify({
+                    content:message
+                })
+            }
+        );
+
+    }catch(e){
+
+        console.log(
+            "Discord通知失敗:",
+            e.message
+        );
+
+    }
 
 }
 
 
 
 // ==============================
-// 状態読み込み
+// 状態保存
 // ==============================
 
 function loadStatus(){
@@ -86,16 +99,12 @@ function loadStatus(){
 
 
 
-// ==============================
-// 状態保存
-// ==============================
-
-function saveStatus(status){
+function saveStatus(data){
 
     fs.writeFileSync(
         STATUS_FILE,
         JSON.stringify(
-            status,
+            data,
             null,
             2
         )
@@ -112,20 +121,111 @@ function saveStatus(status){
 async function getPage(){
 
 
-    const res =
-    await axios.get(
-        TARGET_URL,
-        {
-            headers:{
-                "User-Agent":
-                "Mozilla/5.0"
-            },
-            timeout:30000
+    const headers = {
+
+        "User-Agent":
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
+
+        "Accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+
+        "Accept-Language":
+        "ja-JP,ja;q=0.9,en-US;q=0.8",
+
+        "Cache-Control":
+        "no-cache"
+
+    };
+
+
+
+    for(
+        let i=1;
+        i<=3;
+        i++
+    ){
+
+        try{
+
+
+            console.log(
+                `取得試行 ${i}/3`
+            );
+
+
+
+            const controller =
+            new AbortController();
+
+
+
+            const timer =
+            setTimeout(
+                ()=>controller.abort(),
+                60000
+            );
+
+
+
+            const res =
+            await fetch(
+                TARGET_URL,
+                {
+                    method:"GET",
+                    headers,
+                    signal:
+                    controller.signal
+                }
+            );
+
+
+            clearTimeout(timer);
+
+
+
+            if(!res.ok){
+
+                throw new Error(
+                    `HTTP ${res.status}`
+                );
+
+            }
+
+
+
+            const html =
+            await res.text();
+
+
+
+            return html;
+
+
+
+        }catch(error){
+
+
+            console.log(
+                `取得失敗 ${i}/3:`,
+                error.message
+            );
+
+
+
+            if(i===3){
+
+                throw error;
+
+            }
+
+
+            await new Promise(
+                r=>setTimeout(r,5000)
+            );
+
         }
-    );
 
-
-    return res.data;
+    }
 
 }
 
@@ -138,21 +238,9 @@ async function getPage(){
 function analyze(html){
 
 
-    let status =
-    "不明";
-
-
-    /*
-      ローチケ内部状態
-      NOW_SALE  = 販売中
-      SOLDOUT   = 予定枚数終了
-      FINISH    = 受付終了
-      BEFORE_SALE = 発売前
-    */
-
-
     let area =
     html;
+
 
 
     const index =
@@ -161,15 +249,21 @@ function analyze(html){
     );
 
 
+
     if(index !== -1){
 
         area =
         html.substring(
             index,
-            index + 10000
+            index + 15000
         );
 
     }
+
+
+
+    let status =
+    "不明";
 
 
 
@@ -188,7 +282,6 @@ function analyze(html){
 
     }
 
-
     else if(
         area.includes("SOLDOUT")
         ||
@@ -200,7 +293,6 @@ function analyze(html){
 
     }
 
-
     else if(
         area.includes("FINISH")
         ||
@@ -211,7 +303,6 @@ function analyze(html){
         "受付終了";
 
     }
-
 
     else if(
         area.includes("BEFORE_SALE")
@@ -244,14 +335,17 @@ async function main(){
     );
 
 
+
     const html =
     await getPage();
 
 
+
     console.log(
-        "HTML:",
+        "HTML文字数:",
         html.length
     );
+
 
 
     const status =
@@ -271,12 +365,18 @@ async function main(){
 
 
 
-    if(old === null){
+    if(old===null){
+
 
         saveStatus({
-            status:status,
-            time:new Date().toISOString()
+
+            status,
+
+            time:
+            new Date().toISOString()
+
         });
+
 
 
         console.log(
@@ -294,7 +394,8 @@ async function main(){
         old.status !== status
     ){
 
-        const message =
+
+        await sendDiscord(
 
 `🎫 ローチケ更新検知
 
@@ -304,11 +405,8 @@ ${old.status}
 ↓
 ${status}
 
-${TARGET_URL}`;
+${TARGET_URL}`
 
-
-        await sendDiscord(
-            message
         );
 
 
@@ -323,9 +421,10 @@ ${TARGET_URL}`;
 
     saveStatus({
 
-        status:status,
+        status,
 
-        time:new Date().toISOString()
+        time:
+        new Date().toISOString()
 
     });
 
@@ -339,13 +438,18 @@ main()
 .catch(
     async error=>{
 
-        console.error(error);
+
+        console.error(
+            error
+        );
 
 
         await sendDiscord(
+
 `⚠️ ローチケ監視エラー
 
 ${error.message}`
+
         );
 
 
