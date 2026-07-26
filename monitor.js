@@ -1,5 +1,3 @@
-// monitor.js 完成版⑪ コード①
-
 import fs from "fs";
 
 const TARGET_URL =
@@ -10,6 +8,16 @@ process.env.DISCORD_WEBHOOK;
 
 const DATA_FILE =
 "ticket_list.txt";
+
+
+// 監視時間
+const RUN_TIME =
+6 * 60 * 60 * 1000;
+
+
+// チェック間隔
+const CHECK_INTERVAL =
+6 * 60 * 1000;
 
 
 // 日本時間
@@ -23,6 +31,7 @@ function nowJP(){
     );
 
 }
+
 
 
 // Discord送信
@@ -74,6 +83,16 @@ async function sendDiscord(message){
 
 
 
+// 待機
+function sleep(ms){
+
+    return new Promise(
+        resolve =>
+        setTimeout(resolve, ms)
+    );
+
+}
+
 // HTML取得
 async function getHTML(){
 
@@ -99,7 +118,6 @@ async function getHTML(){
                 ()=>controller.abort(),
                 30000
             );
-
 
 
             const response =
@@ -133,7 +151,6 @@ async function getHTML(){
 
 
             clearTimeout(timer);
-
 
 
             if(!response.ok){
@@ -171,9 +188,7 @@ async function getHTML(){
             }
 
 
-            await new Promise(
-                r=>setTimeout(r,3000)
-            );
+            await sleep(3000);
 
         }
 
@@ -183,7 +198,7 @@ async function getHTML(){
 
 
 
-// HTMLから不要部分削除
+// HTML整理
 function cleanHTML(html){
 
     return html
@@ -217,7 +232,7 @@ function cleanHTML(html){
 
 
 
-// チケット一覧抽出
+// チケット抽出
 function extractTickets(html){
 
     const text =
@@ -252,7 +267,6 @@ ${match[4]}`
     ];
 
 }
-
 
 // 差分確認
 function getDiff(oldText, newList){
@@ -360,8 +374,8 @@ ${newStatus.replace("状態:","")}`
 
 
 
-// メイン処理
-async function main(){
+// 1回分の監視処理
+async function monitorOnce(){
 
 
     console.log(
@@ -384,13 +398,10 @@ async function main(){
     let html;
 
 
-
     try{
-
 
         html =
         await getHTML();
-
 
 
     }catch(e){
@@ -463,7 +474,6 @@ ${e.message}`
     let oldText = "";
 
 
-
     if(
         fs.existsSync(DATA_FILE)
     ){
@@ -478,7 +488,6 @@ ${e.message}`
 
 
 
-    // 初回
     if(!oldText){
 
 
@@ -486,7 +495,6 @@ ${e.message}`
             DATA_FILE,
             currentText
         );
-
 
 
         await sendDiscord(
@@ -506,7 +514,6 @@ ${TARGET_URL}`
         );
 
 
-
         console.log(
             "初回登録"
         );
@@ -516,7 +523,7 @@ ${TARGET_URL}`
 
     }
 
-
+// 差分・通知処理 続き
 
     const diff =
     getDiff(
@@ -583,12 +590,134 @@ ${TARGET_URL}`
         currentText
     );
 
+}
+
+
+
+// メインループ
+async function mainLoop(){
+
+
+    console.log(
+        "監視開始"
+    );
+
+
+    console.log(
+        "開始時刻:",
+        nowJP()
+    );
+
+
+    const startTime =
+    Date.now();
+
+
+
+    while(
+        Date.now() - startTime < RUN_TIME
+    ){
+
+
+        await monitorOnce();
+
+
+
+        const now =
+        new Date();
+
+
+
+        const minute =
+        now.getMinutes();
+
+
+
+        // 毎時00分・20分・40分を優先
+        const nextSpecial =
+        [
+            0,
+            20,
+            40
+        ].find(
+            m =>
+            m > minute
+        );
+
+
+
+        let waitTime =
+        CHECK_INTERVAL;
+
+
+
+        if(
+            nextSpecial !== undefined
+        ){
+
+            const next =
+            new Date(now);
+
+
+            next.setMinutes(
+                nextSpecial,
+                0,
+                0
+            );
+
+
+            const diff =
+            next - now;
+
+
+
+            if(
+                diff > 0 &&
+                diff < waitTime
+            ){
+
+                waitTime = diff;
+
+            }
+
+        }
+
+
+
+        console.log(
+            `次回確認まで ${Math.floor(waitTime / 1000)}秒`
+        );
+
+
+
+        await sleep(
+            waitTime
+        );
+
+    }
+
+
+
+    console.log(
+        "6時間監視終了"
+    );
+
+
+    await sendDiscord(
+`⏹️ ローチケ監視終了
+
+6時間監視が完了しました。
+
+終了時刻:
+${nowJP()}`
+    );
 
 }
 
 
 
-main()
+// 実行
+mainLoop()
 .catch(
     async e=>{
 
