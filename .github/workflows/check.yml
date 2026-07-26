@@ -40,8 +40,8 @@ jobs:
         run: node monitor.js
 
 
-      - name: Save hash
+      - name: Save ticket list
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Update page hash"
-          add: page_hash.txt
+          message: "Update ticket list"
+          add: ticket_list.txt
