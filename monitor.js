@@ -13,47 +13,121 @@ const NOTICE_FILE =
 "last_notice.txt";
 
 
-// 変更なし通知間隔（30分）
+// 変更なし通知間隔
 const NO_CHANGE_INTERVAL =
 30 * 60 * 1000;
 
 
 
+// Discord通知
+
 async function sendDiscord(message){
 
     if(!DISCORD_WEBHOOK){
-        console.log("Webhook未設定");
+
+        console.log(
+            "Webhook未設定"
+        );
+
         return;
+
     }
 
 
-    await fetch(
-        DISCORD_WEBHOOK,
-        {
-            method:"POST",
-            headers:{
-                "Content-Type":"application/json"
-            },
-            body:JSON.stringify({
-                content:message
-            })
-        }
+
+    const controller =
+    new AbortController();
+
+
+    const timer =
+    setTimeout(
+        ()=>controller.abort(),
+        10000
     );
+
+
+    try{
+
+
+        console.log(
+            "Discord送信開始"
+        );
+
+
+        await fetch(
+            DISCORD_WEBHOOK,
+            {
+                method:"POST",
+                headers:{
+                    "Content-Type":
+                    "application/json"
+                },
+                body:JSON.stringify({
+                    content:message
+                }),
+                signal:
+                controller.signal
+            }
+        );
+
+
+        console.log(
+            "Discord送信完了"
+        );
+
+
+    }catch(e){
+
+
+        console.log(
+            "Discord送信失敗:",
+            e.message
+        );
+
+
+    }finally{
+
+
+        clearTimeout(timer);
+
+
+    }
+
 }
 
 
 
-// HTML取得
+// ローチケ取得
 
 async function getHTML(){
 
-    for(let i=1;i<=3;i++){
+
+    for(
+        let i=1;
+        i<=3;
+        i++
+    ){
+
 
         try{
+
 
             console.log(
                 `取得試行 ${i}/3`
             );
+
+
+
+            const controller =
+            new AbortController();
+
+
+            const timer =
+            setTimeout(
+                ()=>controller.abort(),
+                60000
+            );
+
 
 
             const res =
@@ -63,9 +137,15 @@ async function getHTML(){
                     headers:{
                         "User-Agent":
                         "Mozilla/5.0"
-                    }
+                    },
+                    signal:
+                    controller.signal
                 }
             );
+
+
+            clearTimeout(timer);
+
 
 
             if(!res.ok){
@@ -77,19 +157,33 @@ async function getHTML(){
             }
 
 
+
+            console.log(
+                "HTML取得完了"
+            );
+
+
             return await res.text();
+
 
 
         }catch(e){
 
+
             console.log(
+                "取得失敗:",
                 e.message
             );
 
 
-            if(i===3){
+            if(
+                i===3
+            ){
+
                 throw e;
+
             }
+
 
 
             await new Promise(
@@ -104,12 +198,14 @@ async function getHTML(){
 
 
 
-// HTML整形
+// HTML整理
 
 function cleanHTML(html){
 
 
-    let text = html;
+    let text =
+    html;
+
 
 
     text =
@@ -153,7 +249,7 @@ function cleanHTML(html){
 
 
 
-// チケット一覧抽出
+// チケット抽出
 
 function extractTickets(html){
 
@@ -174,9 +270,11 @@ function extractTickets(html){
     let match;
 
 
+
     while(
         (match = regex.exec(text))
     ){
+
 
         result.push(
 
@@ -186,6 +284,7 @@ ${match[2]}
 ${match[4]}`
 
         );
+
 
     }
 
@@ -202,7 +301,10 @@ ${match[4]}`
 
 // 差分取得
 
-function getDiff(oldText,newText){
+function getDiff(
+    oldText,
+    newText
+){
 
 
     const oldList =
@@ -216,9 +318,11 @@ function getDiff(oldText,newText){
     const diff=[];
 
 
+
     for(
         const item of newList
     ){
+
 
         if(
             !oldList.includes(item)
@@ -229,6 +333,7 @@ function getDiff(oldText,newText){
         }
 
     }
+
 
 
     return diff.join("\n\n");
@@ -251,6 +356,7 @@ function canSendNoChange(){
     }
 
 
+
     const last =
     Number(
         fs.readFileSync(
@@ -258,6 +364,7 @@ function canSendNoChange(){
             "utf8"
         )
     );
+
 
 
     return (
@@ -282,6 +389,12 @@ async function main(){
     );
 
 
+
+    console.log(
+        "===================="
+    );
+
+
     console.log(
         "実行時刻:",
         now
@@ -289,7 +402,7 @@ async function main(){
 
 
     console.log(
-        "ローチケ取得開始"
+        "ローチケ監視開始"
     );
 
 
@@ -317,6 +430,7 @@ async function main(){
     );
 
 
+
     console.log(
         "===== 抽出結果 ====="
     );
@@ -336,6 +450,7 @@ async function main(){
     let old="";
 
 
+
     if(
         fs.existsSync(DATA_FILE)
     ){
@@ -349,8 +464,6 @@ async function main(){
     }
 
 
-
-    // 初回
 
     if(!old){
 
@@ -371,8 +484,6 @@ async function main(){
     }
 
 
-
-    // 変更あり
 
     if(
         old !== current
@@ -403,18 +514,19 @@ ${TARGET_URL}`
         );
 
 
-
         console.log(
             "変更通知送信"
         );
 
+
     }
-
-
-
-    // 変更なし
-
     else{
+
+
+        console.log(
+            "変更なし"
+        );
+
 
 
         if(
@@ -434,6 +546,7 @@ ${now}`
             );
 
 
+
             fs.writeFileSync(
                 NOTICE_FILE,
                 String(Date.now())
@@ -450,7 +563,7 @@ ${now}`
 
 
             console.log(
-                "変更なし（通知スキップ）"
+                "変更なし通知スキップ"
             );
 
 
@@ -475,7 +588,10 @@ main()
     async e=>{
 
 
-        console.error(e);
+        console.error(
+            "エラー:",
+            e
+        );
 
 
         await sendDiscord(
@@ -488,6 +604,7 @@ ${e.message}`
 
 
         process.exit(1);
+
 
     }
 );
