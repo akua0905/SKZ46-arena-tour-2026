@@ -1,26 +1,32 @@
+// monitor.js 完成版⑬ コード①
+
 import fs from "fs";
+
+
+// =====================
+// 設定
+// =====================
 
 const TARGET_URL =
 "https://l-tike.com/concert/mevent/?mid=366800";
 
+
+const EVENT_NAME =
+"櫻坂46 ARENA TOUR 2026";
+
+
 const DISCORD_WEBHOOK =
 process.env.DISCORD_WEBHOOK;
+
 
 const DATA_FILE =
 "ticket_list.txt";
 
 
-// 監視時間
-const RUN_TIME =
-6 * 60 * 60 * 1000;
-
-
-// チェック間隔
-const CHECK_INTERVAL =
-6 * 60 * 1000;
-
-
+// =====================
 // 日本時間
+// =====================
+
 function nowJP(){
 
     return new Date().toLocaleString(
@@ -33,8 +39,10 @@ function nowJP(){
 }
 
 
-
+// =====================
 // Discord送信
+// =====================
+
 async function sendDiscord(message){
 
     if(!DISCORD_WEBHOOK){
@@ -48,52 +56,72 @@ async function sendDiscord(message){
     }
 
 
-    try{
+    for(
+        let i=1;
+        i<=3;
+        i++
+    ){
 
-        await fetch(
-            DISCORD_WEBHOOK,
-            {
-                method:"POST",
-                headers:{
-                    "Content-Type":
-                    "application/json"
-                },
-                body:JSON.stringify({
-                    content:message
-                })
-            }
-        );
+        try{
+
+            await fetch(
+                DISCORD_WEBHOOK,
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":
+                        "application/json"
+                    },
+                    body:JSON.stringify({
+                        content:message
+                    })
+                }
+            );
 
 
-        console.log(
-            "Discord送信完了"
-        );
+            console.log(
+                "Discord送信完了"
+            );
 
 
-    }catch(e){
+            return;
 
-        console.log(
-            "Discord送信失敗:",
-            e.message
-        );
+
+        }catch(e){
+
+            console.log(
+                `Discord送信失敗 ${i}/3`,
+                e.message
+            );
+
+
+            await sleep(3000);
+
+        }
 
     }
 
 }
 
 
+// =====================
+// Sleep
+// =====================
 
-// 待機
 function sleep(ms){
 
     return new Promise(
         resolve =>
-        setTimeout(resolve, ms)
+        setTimeout(resolve,ms)
     );
 
 }
 
+
+// =====================
 // HTML取得
+// =====================
+
 async function getHTML(){
 
     for(
@@ -115,7 +143,9 @@ async function getHTML(){
 
             const timer =
             setTimeout(
-                ()=>controller.abort(),
+                ()=>{
+                    controller.abort();
+                },
                 30000
             );
 
@@ -130,10 +160,10 @@ async function getHTML(){
                     headers:{
 
                         "User-Agent":
-                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
 
                         "Accept":
-                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "text/html,application/xhtml+xml",
 
                         "Accept-Language":
                         "ja-JP,ja;q=0.9",
@@ -170,7 +200,6 @@ async function getHTML(){
             return await response.text();
 
 
-
         }catch(e){
 
             console.log(
@@ -179,9 +208,7 @@ async function getHTML(){
             );
 
 
-            if(
-                i===3
-            ){
+            if(i===3){
 
                 throw e;
 
@@ -196,9 +223,10 @@ async function getHTML(){
 
 }
 
+// =====================
+// HTML整形
+// =====================
 
-
-// HTML整理
 function cleanHTML(html){
 
     return html
@@ -232,20 +260,95 @@ function cleanHTML(html){
 
 
 
+// =====================
+// 都道府県
+// =====================
+
+const AREAS = [
+    "北海道",
+    "青森県",
+    "岩手県",
+    "宮城県",
+    "秋田県",
+    "山形県",
+    "福島県",
+    "茨城県",
+    "栃木県",
+    "群馬県",
+    "埼玉県",
+    "千葉県",
+    "東京都",
+    "神奈川県",
+    "新潟県",
+    "富山県",
+    "石川県",
+    "福井県",
+    "山梨県",
+    "長野県",
+    "岐阜県",
+    "静岡県",
+    "愛知県",
+    "三重県",
+    "滋賀県",
+    "京都府",
+    "大阪府",
+    "兵庫県",
+    "奈良県",
+    "和歌山県",
+    "鳥取県",
+    "島根県",
+    "岡山県",
+    "広島県",
+    "山口県",
+    "徳島県",
+    "香川県",
+    "愛媛県",
+    "高知県",
+    "福岡県",
+    "佐賀県",
+    "長崎県",
+    "熊本県",
+    "大分県",
+    "宮崎県",
+    "鹿児島県",
+    "沖縄県"
+];
+
+
+
+// =====================
 // チケット抽出
+// =====================
+
 function extractTickets(html){
 
     const text =
     cleanHTML(html);
 
 
+
+    const areaPattern =
+    AREAS.join("|");
+
+
+
     const regex =
-    /(\d{1,2}\.\d{1,2}.*?)(兵庫県|広島県|千葉県|宮城県|香川県).*?(発売中|予定枚数終了|発売前|受付終了).*?(一般発売.*?先着)/g;
+    new RegExp(
+        `(\\d{1,2}\\.\\d{1,2}.*?)(` +
+        areaPattern +
+        `).*?` +
+        `(発売中|販売中|受付中|予定枚数終了|発売前|受付終了)` +
+        `.*?(一般発売.*?(先着|抽選))`,
+        "g"
+    );
+
 
 
     const result=[];
 
+
     let match;
+
 
 
     while(
@@ -262,50 +365,58 @@ ${match[4]}`
     }
 
 
+
     return [
         ...new Set(result)
     ];
 
 }
 
+
+
+// =====================
 // 差分確認
-function getDiff(oldText, newList){
+// =====================
+
+function getDiff(oldText,newList){
+
 
     const oldItems =
     oldText.split("\n\n");
 
 
-    const changes = [];
+    const changes=[];
 
 
-    for(const newItem of newList){
 
-        const newLines =
+    for(
+        const newItem of newList
+    ){
+
+        const lines =
         newItem.split("\n");
 
 
+
         const date =
-        newLines[0];
+        lines[0];
+
 
 
         const area =
-        newLines.find(
+        lines.find(
             x =>
-            [
-                "兵庫県",
-                "広島県",
-                "千葉県",
-                "宮城県",
-                "香川県"
-            ].includes(x)
+            AREAS.includes(x)
         );
+
 
 
         const newStatus =
-        newLines.find(
+        lines.find(
             x =>
             x.startsWith("状態:")
         );
+
 
 
         if(
@@ -371,12 +482,11 @@ ${newStatus.replace("状態:","")}`
 
 }
 
+// =====================
+// 監視1回分
+// =====================
 
-
-
-// 1回分の監視処理
 async function monitorOnce(){
-
 
     console.log(
         "===================="
@@ -394,7 +504,6 @@ async function monitorOnce(){
     );
 
 
-
     let html;
 
 
@@ -405,13 +514,6 @@ async function monitorOnce(){
 
 
     }catch(e){
-
-
-        console.log(
-            "取得最終失敗:",
-            e.message
-        );
-
 
         await sendDiscord(
 `⚠️ ローチケ監視
@@ -450,12 +552,6 @@ ${e.message}`
 
 
     console.log(
-        "抽出文字数:",
-        currentText.length
-    );
-
-
-    console.log(
         "===== 抽出結果 ====="
     );
 
@@ -490,7 +586,6 @@ ${e.message}`
 
     if(!oldText){
 
-
         fs.writeFileSync(
             DATA_FILE,
             currentText
@@ -500,12 +595,12 @@ ${e.message}`
         await sendDiscord(
 `🆕 ローチケ監視開始
 
+${EVENT_NAME}
+
 初回データ登録
 
 時刻:
 ${nowJP()}
-
-現在状態:
 
 ${currentText}
 
@@ -514,16 +609,11 @@ ${TARGET_URL}`
         );
 
 
-        console.log(
-            "初回登録"
-        );
-
-
         return;
 
     }
 
-// 差分・通知処理 続き
+
 
     const diff =
     getDiff(
@@ -535,12 +625,10 @@ ${TARGET_URL}`
 
     if(diff){
 
-
         await sendDiscord(
-
 `🎫 ローチケ更新検知
 
-櫻坂46 ARENA TOUR 2026
+${EVENT_NAME}
 
 変更内容:
 
@@ -554,19 +642,14 @@ ${TARGET_URL}`
         );
 
 
-        console.log(
-            "変更通知送信"
-        );
-
-
     }else{
 
-
         await sendDiscord(
-
 `✅ ローチケ監視
 
 変更なし
+
+${EVENT_NAME}
 
 時刻:
 ${nowJP()}
@@ -574,12 +657,6 @@ ${nowJP()}
 確認:
 ${TARGET_URL}`
         );
-
-
-        console.log(
-            "変更なし通知送信"
-        );
-
 
     }
 
@@ -594,28 +671,94 @@ ${TARGET_URL}`
 
 
 
-// メインループ
-async function mainLoop(){
+// =====================
+// 次回チェック時刻
+// 00分・20分・40分優先
+// =====================
+
+function getNextCheckTime(){
+
+    const now =
+    new Date();
 
 
-    console.log(
-        "監視開始"
+    const candidates =
+    [
+        0,
+        20,
+        40
+    ];
+
+
+
+    for(
+        const minute of candidates
+    ){
+
+        const next =
+        new Date(now);
+
+
+        next.setMinutes(
+            minute,
+            0,
+            0
+        );
+
+
+        if(
+            next > now
+        ){
+
+            return next;
+
+        }
+
+    }
+
+
+
+    const nextHour =
+    new Date(now);
+
+
+    nextHour.setHours(
+        nextHour.getHours()+1,
+        0,
+        0,
+        0
     );
 
 
+    return nextHour;
+
+}
+
+
+
+// =====================
+// 6時間監視ループ
+// =====================
+
+async function mainLoop(){
+
+
+    const endTime =
+    Date.now()
+    +
+    6 * 60 * 60 * 1000;
+
+
+
     console.log(
-        "開始時刻:",
+        "監視開始:",
         nowJP()
     );
 
 
-    const startTime =
-    Date.now();
-
-
 
     while(
-        Date.now() - startTime < RUN_TIME
+        Date.now() < endTime
     ){
 
 
@@ -623,120 +766,75 @@ async function mainLoop(){
 
 
 
-        const now =
-        new Date();
+        const next =
+        getNextCheckTime();
 
 
 
-        const minute =
-        now.getMinutes();
-
-
-
-        // 毎時00分・20分・40分を優先
-        const nextSpecial =
-        [
-            0,
-            20,
-            40
-        ].find(
-            m =>
-            m > minute
-        );
-
-
-
-        let waitTime =
-        CHECK_INTERVAL;
-
-
-
-        if(
-            nextSpecial !== undefined
-        ){
-
-            const next =
-            new Date(now);
-
-
-            next.setMinutes(
-                nextSpecial,
-                0,
-                0
-            );
-
-
-            const diff =
-            next - now;
-
-
-
-            if(
-                diff > 0 &&
-                diff < waitTime
-            ){
-
-                waitTime = diff;
-
-            }
-
-        }
+        const wait =
+        next - new Date();
 
 
 
         console.log(
-            `次回確認まで ${Math.floor(waitTime / 1000)}秒`
+            `次回確認:
+${next.toLocaleString("ja-JP")}`
         );
 
 
 
         await sleep(
-            waitTime
+            wait
         );
 
     }
 
 
 
-    console.log(
-        "6時間監視終了"
-    );
-
-
     await sendDiscord(
 `⏹️ ローチケ監視終了
 
-6時間監視が完了しました。
+${EVENT_NAME}
 
-終了時刻:
+6時間監視完了
+
+終了:
 ${nowJP()}`
+    );
+
+
+    console.log(
+        "6時間監視終了"
     );
 
 }
 
 
 
+// =====================
 // 実行
+// =====================
+
 mainLoop()
 .catch(
     async e=>{
 
 
         console.error(
-            "予期せぬエラー:",
-            e.message
+            e
         );
 
 
         await sendDiscord(
 `⚠️ ローチケ監視エラー
 
+${EVENT_NAME}
+
 時刻:
 ${nowJP()}
 
 ${e.message}`
         );
-
 
     }
 );
