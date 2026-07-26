@@ -12,27 +12,17 @@ const DATA_FILE =
 const NOTICE_FILE =
 "last_notice.txt";
 
-
-// 変更なし通知間隔
 const NO_CHANGE_INTERVAL =
 30 * 60 * 1000;
 
 
 
-// Discord通知
-
 async function sendDiscord(message){
 
     if(!DISCORD_WEBHOOK){
-
-        console.log(
-            "Webhook未設定"
-        );
-
+        console.log("Webhook未設定");
         return;
-
     }
-
 
 
     const controller =
@@ -48,12 +38,6 @@ async function sendDiscord(message){
 
     try{
 
-
-        console.log(
-            "Discord送信開始"
-        );
-
-
         await fetch(
             DISCORD_WEBHOOK,
             {
@@ -65,8 +49,7 @@ async function sendDiscord(message){
                 body:JSON.stringify({
                     content:message
                 }),
-                signal:
-                controller.signal
+                signal:controller.signal
             }
         );
 
@@ -78,7 +61,6 @@ async function sendDiscord(message){
 
     }catch(e){
 
-
         console.log(
             "Discord送信失敗:",
             e.message
@@ -87,9 +69,7 @@ async function sendDiscord(message){
 
     }finally{
 
-
         clearTimeout(timer);
-
 
     }
 
@@ -97,7 +77,6 @@ async function sendDiscord(message){
 
 
 
-// ローチケ取得
 
 async function getHTML(){
 
@@ -108,14 +87,11 @@ async function getHTML(){
         i++
     ){
 
-
         try{
-
 
             console.log(
                 `取得試行 ${i}/3`
             );
-
 
 
             const controller =
@@ -125,9 +101,8 @@ async function getHTML(){
             const timer =
             setTimeout(
                 ()=>controller.abort(),
-                60000
+                15000
             );
-
 
 
             const res =
@@ -136,7 +111,7 @@ async function getHTML(){
                 {
                     headers:{
                         "User-Agent":
-                        "Mozilla/5.0"
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"
                     },
                     signal:
                     controller.signal
@@ -155,7 +130,6 @@ async function getHTML(){
                 );
 
             }
-
 
 
             console.log(
@@ -185,9 +159,8 @@ async function getHTML(){
             }
 
 
-
             await new Promise(
-                r=>setTimeout(r,5000)
+                r=>setTimeout(r,3000)
             );
 
         }
@@ -198,14 +171,12 @@ async function getHTML(){
 
 
 
-// HTML整理
 
 function cleanHTML(html){
 
 
     let text =
     html;
-
 
 
     text =
@@ -249,7 +220,7 @@ function cleanHTML(html){
 
 
 
-// チケット抽出
+
 
 function extractTickets(html){
 
@@ -266,7 +237,6 @@ function extractTickets(html){
 
     let result=[];
 
-
     let match;
 
 
@@ -274,7 +244,6 @@ function extractTickets(html){
     while(
         (match = regex.exec(text))
     ){
-
 
         result.push(
 
@@ -284,7 +253,6 @@ ${match[2]}
 ${match[4]}`
 
         );
-
 
     }
 
@@ -299,12 +267,9 @@ ${match[4]}`
 
 
 
-// 差分取得
 
-function getDiff(
-    oldText,
-    newText
-){
+
+function getDiff(oldText,newText){
 
 
     const oldList =
@@ -318,11 +283,9 @@ function getDiff(
     const diff=[];
 
 
-
     for(
         const item of newList
     ){
-
 
         if(
             !oldList.includes(item)
@@ -335,14 +298,13 @@ function getDiff(
     }
 
 
-
     return diff.join("\n\n");
 
 }
 
 
 
-// 変更なし通知判定
+
 
 function canSendNoChange(){
 
@@ -377,7 +339,7 @@ function canSendNoChange(){
 
 
 
-// メイン
+
 
 async function main(){
 
@@ -387,7 +349,6 @@ async function main(){
     .toLocaleString(
         "ja-JP"
     );
-
 
 
     console.log(
@@ -402,7 +363,7 @@ async function main(){
 
 
     console.log(
-        "ローチケ監視開始"
+        "ローチケ取得開始"
     );
 
 
@@ -428,7 +389,6 @@ async function main(){
         "抽出文字数:",
         current.length
     );
-
 
 
     console.log(
@@ -465,6 +425,7 @@ async function main(){
 
 
 
+
     if(!old){
 
 
@@ -485,6 +446,8 @@ async function main(){
 
 
 
+
+
     if(
         old !== current
     ){
@@ -495,7 +458,6 @@ async function main(){
             old,
             current
         );
-
 
 
         await sendDiscord(
@@ -528,7 +490,6 @@ ${TARGET_URL}`
         );
 
 
-
         if(
             canSendNoChange()
         ){
@@ -546,7 +507,6 @@ ${now}`
             );
 
 
-
             fs.writeFileSync(
                 NOTICE_FILE,
                 String(Date.now())
@@ -561,11 +521,9 @@ ${now}`
         }
         else{
 
-
             console.log(
                 "変更なし通知スキップ"
             );
-
 
         }
 
@@ -573,10 +531,12 @@ ${now}`
 
 
 
+
     fs.writeFileSync(
         DATA_FILE,
         current
     );
+
 
 
 }
@@ -587,10 +547,9 @@ main()
 .catch(
     async e=>{
 
-
         console.error(
             "エラー:",
-            e
+            e.message
         );
 
 
@@ -604,7 +563,6 @@ ${e.message}`
 
 
         process.exit(1);
-
 
     }
 );
