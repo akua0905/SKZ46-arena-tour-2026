@@ -2,7 +2,7 @@ name: Lawson Ticket Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "0,6,12,18,20,26,32,38,40,46,52,58 * * * *"
 
   workflow_dispatch:
 
@@ -40,8 +40,10 @@ jobs:
         run: node monitor.js
 
 
-      - name: Save ticket list
+      - name: Save ticket data
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Update ticket list"
-          add: ticket_list.txt
+          message: "Update ticket monitor data"
+          add: |
+            ticket_list.txt
+            last_notice.txt
