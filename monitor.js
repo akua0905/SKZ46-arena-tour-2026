@@ -1,6 +1,6 @@
 // ==========================================
-// ローチケページ差分監視版
-// Node.js / GitHub Actions対応
+// ローチケ チケット一覧差分監視版
+// GitHub Actions / Node.js対応
 // ==========================================
 
 import fs from "fs";
@@ -18,8 +18,8 @@ const DISCORD_WEBHOOK =
 process.env.DISCORD_WEBHOOK;
 
 
-const HASH_FILE =
-"page_hash.txt";
+const DATA_FILE =
+"ticket_list.txt";
 
 
 
@@ -30,13 +30,8 @@ const HASH_FILE =
 async function sendDiscord(message){
 
     if(!DISCORD_WEBHOOK){
-
-        console.log(
-            "Webhook未設定"
-        );
-
+        console.log("Webhook未設定");
         return;
-
     }
 
 
@@ -58,198 +53,215 @@ async function sendDiscord(message){
 
 
 // ==============================
-// ページ取得
+// HTML取得
 // ==============================
 
 async function getHTML(){
 
 
-    for(
-        let i=1;
-        i<=3;
-        i++
-    ){
+    const res =
+    await fetch(
+        TARGET_URL,
+        {
+            headers:{
 
-        try{
+                "User-Agent":
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
 
-
-            console.log(
-                `取得試行 ${i}/3`
-            );
-
-
-            const controller =
-            new AbortController();
-
-
-            const timer =
-            setTimeout(
-                ()=>{
-                    controller.abort();
-                },
-                60000
-            );
-
-
-
-            const res =
-            await fetch(
-                TARGET_URL,
-                {
-                    signal:
-                    controller.signal,
-
-                    headers:{
-
-                        "User-Agent":
-                        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1",
-
-                        "Accept":
-                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-
-                        "Accept-Language":
-                        "ja-JP,ja;q=0.9"
-
-                    }
-                }
-            );
-
-
-            clearTimeout(timer);
-
-
-
-            if(!res.ok){
-
-                throw new Error(
-                    `HTTP ${res.status}`
-                );
+                "Accept":
+                "text/html,application/xhtml+xml"
 
             }
-
-
-            return await res.text();
-
-
-
-        }catch(error){
-
-
-            console.log(
-                "取得失敗:",
-                error.message
-            );
-
-
-            if(i===3){
-
-                throw error;
-
-            }
-
-
-            await new Promise(
-                r=>setTimeout(r,5000)
-            );
-
         }
+    );
+
+
+    if(!res.ok){
+
+        throw new Error(
+            `HTTP ${res.status}`
+        );
 
     }
+
+
+    return await res.text();
 
 }
 
 
 
 // ==============================
-// 不要変化除去
+// チケット一覧抽出
 // ==============================
 
-function cleanHTML(html){
+function extractTicketList(html){
 
 
-    let text =
-    html;
+    let start =
+    html.indexOf(
+        "チケット一覧"
+    );
 
 
-    // 改行・空白整理
+    if(start === -1){
 
-    text =
-    text.replace(
+        console.log(
+            "チケット一覧開始位置なし"
+        );
+
+        start = 0;
+
+    }
+
+
+
+    let end =
+    html.indexOf(
+        "選択する",
+        start
+    );
+
+
+    if(end === -1){
+
+        end =
+        start + 50000;
+
+    }
+    else{
+
+        end += 5000;
+
+    }
+
+
+
+    let area =
+    html.substring(
+        start,
+        end
+    );
+
+
+
+    // HTMLタグ除去
+
+    area =
+    area.replace(
+        /<script[\s\S]*?<\/script>/gi,
+        ""
+    );
+
+
+    area =
+    area.replace(
+        /<style[\s\S]*?<\/style>/gi,
+        ""
+    );
+
+
+    area =
+    area.replace(
+        /<[^>]+>/g,
+        " "
+    );
+
+
+
+    // HTMLエンティティ整理
+
+    area =
+    area.replace(
+        /&nbsp;/g,
+        " "
+    );
+
+
+
+    // 空白整理
+
+    area =
+    area.replace(
         /\s+/g,
         " "
     );
 
 
 
-    // 日時削除
-
-    text =
-    text.replace(
-        /\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/g,
-        ""
-    );
-
-
-    text =
-    text.replace(
-        /\d{1,2}:\d{2}(:\d{2})?/g,
-        ""
-    );
-
-
-
-    // ランダム値削除
-
-    text =
-    text.replace(
-        /session[a-zA-Z0-9_-]*/gi,
-        ""
-    );
-
-
-    text =
-    text.replace(
-        /token[a-zA-Z0-9_-]*/gi,
-        ""
-    );
-
-
-
-    return text;
+    return area.trim();
 
 }
 
 
 
 // ==============================
-// ハッシュ生成
+// 差分作成
 // ==============================
 
-function createHash(text){
+function createDiff(oldText,newText){
 
 
-    let hash =
-    0;
+    const oldLines =
+    oldText.split(" ");
+
+
+    const newLines =
+    newText.split(" ");
+
+
+
+    let removed = [];
+
+    let added = [];
+
 
 
     for(
-        let i=0;
-        i<text.length;
-        i++
+        const item of oldLines
     ){
 
-        hash =
-        ((hash << 5) - hash)
-        +
-        text.charCodeAt(i);
+        if(
+            !newLines.includes(item)
+            &&
+            item.length > 1
+        ){
 
+            removed.push(item);
 
-        hash |= 0;
+        }
 
     }
 
 
-    return String(hash);
+
+    for(
+        const item of newLines
+    ){
+
+        if(
+            !oldLines.includes(item)
+            &&
+            item.length > 1
+        ){
+
+            added.push(item);
+
+        }
+
+    }
+
+
+
+    return {
+
+        removed:
+        [...new Set(removed)].slice(0,30),
+
+        added:
+        [...new Set(added)].slice(0,30)
+
+    };
 
 }
 
@@ -280,37 +292,29 @@ async function main(){
 
 
 
-    const cleaned =
-    cleanHTML(html);
-
-
-
-    const currentHash =
-    createHash(cleaned);
+    const ticketList =
+    extractTicketList(html);
 
 
 
     console.log(
-        "現在HASH:",
-        currentHash
+        "チケット一覧文字数:",
+        ticketList.length
     );
 
 
 
-    let oldHash =
-    null;
+    let old = "";
 
 
 
     if(
-        fs.existsSync(
-            HASH_FILE
-        )
+        fs.existsSync(DATA_FILE)
     ){
 
-        oldHash =
+        old =
         fs.readFileSync(
-            HASH_FILE,
+            DATA_FILE,
             "utf8"
         );
 
@@ -318,12 +322,12 @@ async function main(){
 
 
 
-    if(!oldHash){
+    if(!old){
 
 
         fs.writeFileSync(
-            HASH_FILE,
-            currentHash
+            DATA_FILE,
+            ticketList
         );
 
 
@@ -339,27 +343,42 @@ async function main(){
 
 
     if(
-        oldHash !== currentHash
+        old !== ticketList
     ){
 
 
-        console.log(
-            "ページ変更検知"
+        const diff =
+        createDiff(
+            old,
+            ticketList
         );
 
 
 
-        await sendDiscord(
+        let message =
 
 `🎫 ローチケ更新検知
 
 櫻坂46 ARENA TOUR 2026
 
-ローチケページに変更がありました。
+【変更前】
+${diff.removed.join(" ") || "なし"}
 
-確認：
-${TARGET_URL}`
+【変更後】
+${diff.added.join(" ") || "なし"}
 
+確認:
+${TARGET_URL}`;
+
+
+
+        await sendDiscord(
+            message
+        );
+
+
+        console.log(
+            "変更通知送信"
         );
 
 
@@ -376,8 +395,8 @@ ${TARGET_URL}`
 
 
     fs.writeFileSync(
-        HASH_FILE,
-        currentHash
+        DATA_FILE,
+        ticketList
     );
 
 
@@ -389,18 +408,13 @@ main()
 .catch(
     async error=>{
 
-
-        console.error(
-            error
-        );
+        console.error(error);
 
 
         await sendDiscord(
-
 `⚠️ ローチケ監視エラー
 
 ${error.message}`
-
         );
 
 
