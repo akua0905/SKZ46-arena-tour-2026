@@ -1,18 +1,22 @@
 // ==========================================
-// ローチケ チケット一覧監視版
-// 完成版③ 修正版
+// ローチケ チケット一覧監視版④
+// 抽出精度改善版
 // ==========================================
 
 import fs from "fs";
 
+
 const TARGET_URL =
 "https://l-tike.com/concert/mevent/?mid=366800";
+
 
 const DISCORD_WEBHOOK =
 process.env.DISCORD_WEBHOOK;
 
+
 const DATA_FILE =
 "ticket_list.txt";
+
 
 
 // ==============================
@@ -26,6 +30,7 @@ async function sendDiscord(message){
         return;
     }
 
+
     await fetch(
         DISCORD_WEBHOOK,
         {
@@ -38,7 +43,9 @@ async function sendDiscord(message){
             })
         }
     );
+
 }
+
 
 
 // ==============================
@@ -47,6 +54,7 @@ async function sendDiscord(message){
 
 async function getHTML(){
 
+
     for(let i=1;i<=3;i++){
 
         try{
@@ -54,6 +62,7 @@ async function getHTML(){
             console.log(
                 `取得試行 ${i}/3`
             );
+
 
             const controller =
             new AbortController();
@@ -73,11 +82,13 @@ async function getHTML(){
                     signal:controller.signal,
 
                     headers:{
+
                         "User-Agent":
                         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
 
                         "Accept":
-                        "text/html,application/xhtml+xml"
+                        "text/html"
+
                     }
                 }
             );
@@ -98,7 +109,9 @@ async function getHTML(){
             return await res.text();
 
 
+
         }catch(e){
+
 
             console.log(
                 "取得失敗:",
@@ -122,149 +135,137 @@ async function getHTML(){
 }
 
 
+
 // ==============================
-// チケット情報抽出
+// チケット一覧抽出
 // ==============================
 
 function extractTicketList(html){
 
 
-    let result = "";
+    // JavaScript定義部分を除去
 
-
-
-    // 状態ワード周辺を抽出
-
-    const keywords = [
-        "予定枚数終了",
-        "発売中",
-        "発売前",
-        "受付終了",
-        "販売中",
-        "一般発売先着",
-        "選択する"
-    ];
-
-
-
-    for(const key of keywords){
-
-
-        let index = 0;
-
-
-        while(true){
-
-
-            index =
-            html.indexOf(
-                key,
-                index
-            );
-
-
-            if(index === -1){
-                break;
-            }
-
-
-            const start =
-            Math.max(
-                0,
-                index - 500
-            );
-
-
-            const end =
-            Math.min(
-                html.length,
-                index + 500
-            );
-
-
-            result +=
-            html.substring(
-                start,
-                end
-            )
-            + "\n";
-
-
-            index += key.length;
-
-        }
-
-    }
-
-
-
-    // HTML除去
-
-    result =
-    result.replace(
+    html =
+    html.replace(
         /<script[\s\S]*?<\/script>/gi,
         ""
     );
 
 
-    result =
-    result.replace(
-        /<style[\s\S]*?<\/style>/gi,
+    html =
+    html.replace(
+        /Codes\.[\s\S]*?};/g,
         ""
     );
 
 
-    result =
-    result.replace(
+
+    let text =
+    html.replace(
         /<[^>]+>/g,
         " "
     );
 
 
-    result =
-    result.replace(
+    text =
+    text.replace(
         /&nbsp;/g,
         " "
     );
 
 
-    result =
-    result.replace(
+    text =
+    text.replace(
         /\s+/g,
         " "
     );
 
 
-    return result.trim();
 
-}
+    const areas = [
+
+        "兵庫県",
+        "広島県",
+        "千葉県",
+        "宮城県",
+        "香川県"
+
+    ];
 
 
 
-// ==============================
-// 差分作成
-// ==============================
+    const statuses = [
 
-function diff(oldText,newText){
+        "発売中",
+        "予定枚数終了",
+        "発売前",
+        "受付終了"
+
+    ];
 
 
-    if(!oldText){
 
-        return {
-            before:"",
-            after:newText
-        };
+    let result = [];
+
+
+
+    for(
+        const area of areas
+    ){
+
+
+        let index =
+        text.indexOf(
+            area
+        );
+
+
+        if(index === -1){
+            continue;
+        }
+
+
+
+        let block =
+        text.substring(
+            index,
+            index + 200
+        );
+
+
+
+        let status =
+        statuses.find(
+            s=>block.includes(s)
+        );
+
+
+
+        let sale =
+        block.includes(
+            "一般発売"
+        )
+        ?
+        "一般発売"
+        :
+        "";
+
+
+
+        result.push(
+
+`${block.substring(0,100)}
+状態:${status || "不明"}
+${sale}`
+
+        );
+
 
     }
 
 
-    return {
 
-        before:oldText,
-
-        after:newText
-
-    };
+    return result.join("\n\n");
 
 }
 
@@ -284,6 +285,7 @@ async function main(){
 
     const html =
     await getHTML();
+
 
 
     console.log(
@@ -310,10 +312,7 @@ async function main(){
 
 
     console.log(
-        ticketList.substring(
-            0,
-            2000
-        )
+        ticketList
     );
 
 
@@ -323,7 +322,15 @@ async function main(){
 
 
 
-    let old="";
+    console.log(
+        "保存ファイル存在:",
+        fs.existsSync(DATA_FILE)
+    );
+
+
+
+    let old = "";
+
 
 
     if(
@@ -370,31 +377,28 @@ async function main(){
         );
 
 
-        const message =
+
+        await sendDiscord(
 
 `🎫 ローチケ更新検知
 
 櫻坂46 ARENA TOUR 2026
 
 変更前:
-${old.substring(0,800)}
+${old.substring(0,1000)}
 
 ↓
 
 変更後:
-${ticketList.substring(0,800)}
+${ticketList.substring(0,1000)}
 
-確認:
-${TARGET_URL}`;
+${TARGET_URL}`
 
-
-
-        await sendDiscord(
-            message
         );
 
 
-    }else{
+    }
+    else{
 
 
         console.log(
@@ -410,6 +414,7 @@ ${TARGET_URL}`;
         ticketList
     );
 
+
 }
 
 
@@ -420,11 +425,13 @@ main()
 
         console.error(e);
 
+
         await sendDiscord(
 `⚠️ ローチケ監視エラー
 
 ${e.message}`
         );
+
 
         process.exit(1);
 
