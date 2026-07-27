@@ -1,8 +1,9 @@
 // =====================
-// monitor.js 完成版
+// monitor.js (即時Git Push対応版)
 // =====================
 
 import fs from "fs";
+import { execSync } from "child_process";
 
 // =====================
 // 設定
@@ -31,24 +32,42 @@ function sleep(ms) {
 }
 
 // =====================
+// Gitコミット＆プッシュ（即時保存）
+// =====================
+
+function commitAndPush(commitMessage) {
+    try {
+        execSync('git config user.name "github-actions[bot]"');
+        execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
+        execSync(`git add ${DATA_FILE} ${LAST_DIFF_FILE}`);
+        try {
+            execSync(`git commit -m "${commitMessage}"`);
+            execSync("git push");
+            console.log("GitHubへ即時保存完了");
+        } catch (e) {
+            console.log("Gitコミット対象なし、または書き込み不要");
+        }
+    } catch (e) {
+        console.error("Git Push失敗:", e.message);
+    }
+}
+
+// =====================
 // Discord通知フォーマット生成
 // =====================
 
 function buildMessage(title, content = "") {
     let msg = `${title}\n［${EVENT_NAME}］\n----------------------\n`;
-    
     if (content) {
         msg += `【内容】\n${content}\n----------------------\n`;
     }
-    
     msg += `【確認時間】\n${nowJP()}\n----------------------\n`;
     msg += `【ローチケURL】\n${TARGET_URL}\n--------------------------------`;
-    
     return msg;
 }
 
 // =====================
-// Discord送信処理（指数バックオフ対応）
+// Discord送信処理
 // =====================
 
 async function sendDiscord(message) {
@@ -61,36 +80,27 @@ async function sendDiscord(message) {
         try {
             const response = await fetch(DISCORD_WEBHOOK, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content: message })
             });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             console.log("Discord送信完了");
             return;
-            
         } catch (e) {
             console.log(`Discord送信失敗 ${i}/3`, e.message);
-            const waitTime = i === 1 ? 3000 : i === 2 ? 6000 : 12000;
-            await sleep(waitTime);
+            await sleep(i * 3000);
         }
     }
 }
 
 // =====================
-// HTML取得（指数バックオフ対応）
+// HTML取得
 // =====================
 
 async function getHTML() {
     for (let i = 1; i <= 3; i++) {
         try {
             console.log(`取得試行 ${i}/3`);
-            
             const controller = new AbortController();
             const timer = setTimeout(() => { controller.abort(); }, 30000);
             
@@ -104,23 +114,14 @@ async function getHTML() {
                 },
                 signal: controller.signal
             });
-            
             clearTimeout(timer);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             console.log("HTML取得完了");
             return await response.text();
-            
         } catch (e) {
             console.log("取得失敗:", e.message);
-            if (i === 3) {
-                throw e;
-            }
-            const waitTime = i === 1 ? 3000 : i === 2 ? 6000 : 12000;
-            await sleep(waitTime);
+            if (i === 3) throw e;
+            await sleep(i * 3000);
         }
     }
 }
@@ -166,7 +167,6 @@ function extractTickets(html) {
     
     const result = [];
     let match;
-    
     while ((match = regex.exec(text))) {
         result.push(
 `${match[1].trim()}
@@ -195,7 +195,6 @@ function getDiff(oldText, newList) {
         if (!date || !area || !newStatus) continue;
         
         const oldItem = oldItems.find(x => x.includes(date) && x.includes(area));
-        
         if (!oldItem) continue;
         
         const oldStatus = oldItem.split("\n").find(x => x.startsWith("状態:"));
@@ -204,6 +203,7 @@ function getDiff(oldText, newList) {
             changes.push(
 `${area}
 ${date}
+
 ${oldStatus.replace("状態:", "")}
 ↓
 ${newStatus.replace("状態:", "")}`
@@ -226,10 +226,7 @@ async function monitorOnce() {
     try {
         html = await getHTML();
     } catch (e) {
-        const message = buildMessage(
-            "！ローチケ監視｜エラー",
-            `取得失敗: ${e.message}`
-        );
+        const message = buildMessage("ローチケ監視｜エラー", `取得失敗: ${e.message}`);
         await sendDiscord(message);
         return;
     }
@@ -238,16 +235,11 @@ async function monitorOnce() {
     const currentList = extractTickets(html);
     const currentText = currentList.join("\n\n");
     
-    console.log("===== 抽出結果 =====");
-    console.log(currentText);
-    console.log("====================");
-    
     let oldText = "";
     if (fs.existsSync(DATA_FILE)) {
         oldText = fs.readFileSync(DATA_FILE, "utf8");
     }
     
-    // 毎回最新内容へ更新
     fs.writeFileSync(DATA_FILE, currentText, "utf8");
     
     // 初回登録
@@ -255,10 +247,8 @@ async function monitorOnce() {
         if (fs.existsSync(LAST_DIFF_FILE)) {
             fs.unlinkSync(LAST_DIFF_FILE);
         }
-        const message = buildMessage(
-            "●ローチケ監視｜初回登録",
-            "初回データを登録しました。"
-        );
+        commitAndPush("Update initial ticket data");
+        const message = buildMessage("ローチケ監視｜初回登録", "初回データを登録しました。");
         await sendDiscord(message);
         return;
     }
@@ -273,17 +263,16 @@ async function monitorOnce() {
     // 変更あり
     if (diff && diff !== lastDiff) {
         fs.writeFileSync(LAST_DIFF_FILE, diff, "utf8");
-        const message = buildMessage(
-            "●ローチケ監視｜変更検知",
-            diff
-        );
+        commitAndPush(`Update ticket status diff: ${nowJP()}`);
+        const message = buildMessage("●ローチケ監視｜変更検知", diff);
         await sendDiscord(message);
-        console.log("変更通知送信");
+        console.log("変更通知送信＆即時Push完了");
     }
     // 変更なし
     else {
         if (diff === "" && fs.existsSync(LAST_DIFF_FILE)) {
             fs.unlinkSync(LAST_DIFF_FILE);
+            commitAndPush("Reset last diff");
         }
         const message = buildMessage("○ローチケ監視｜変更なし");
         await sendDiscord(message);
@@ -298,15 +287,11 @@ async function monitorOnce() {
 function getNextCheckTime() {
     const now = new Date();
     const minutes = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-    
     for (const minute of minutes) {
         const next = new Date(now);
         next.setMinutes(minute, 0, 0);
-        if (next > now) {
-            return next;
-        }
+        if (next > now) return next;
     }
-    
     const nextHour = new Date(now);
     nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
     return nextHour;
@@ -317,7 +302,6 @@ function getNextCheckTime() {
 // =====================
 
 async function mainLoop() {
-    // 時間設定（ミリ秒）
     const NOTICE_TIME_MS = 21000000; // 5時間50分
     const END_TIME_MS = 21480000;    // 5時間58分
 
@@ -330,7 +314,6 @@ async function mainLoop() {
     while (true) {
         const elapsedTime = Date.now() - startTime;
 
-        // 5時間50分経過時の事前通知（1回のみ実行）
         if (elapsedTime >= NOTICE_TIME_MS && !isNoticeSent) {
             isNoticeSent = true;
             const noticeMessage = buildMessage(
@@ -338,29 +321,19 @@ async function mainLoop() {
                 "監視開始から5時間50分が経過しました。\n約8分後の5時間58分時点で一旦停止し、次のスケジュールで再起動します。"
             );
             await sendDiscord(noticeMessage);
-            console.log("まもなく再起動通知送信");
         }
 
-        // 5時間58分経過でループ終了
-        if (Date.now() >= endTime) {
-            break;
-        }
+        if (Date.now() >= endTime) break;
 
         await monitorOnce();
 
         const next = getNextCheckTime();
         const wait = next.getTime() - Date.now();
 
-        // 次の待機を行うと5時間58分を超える場合は待機せず終了
-        if (Date.now() + wait >= endTime) {
-            break;
-        }
+        if (Date.now() + wait >= endTime) break;
 
         console.log(`次回確認:\n${next.toLocaleString("ja-JP")}`);
-
-        if (wait > 0) {
-            await sleep(wait);
-        }
+        if (wait > 0) await sleep(wait);
     }
 
     const endMessage = buildMessage(
@@ -371,16 +344,12 @@ async function mainLoop() {
     console.log("監視終了");
 }
 
-
 // =====================
 // 実行
 // =====================
 
 mainLoop().catch(async (e) => {
     console.error(e);
-    const message = buildMessage(
-        "！ローチケ監視｜重大なエラー",
-        `予期せぬエラー: ${e.message}`
-    );
+    const message = buildMessage("ローチケ監視｜重大なエラー", `予期せぬエラー: ${e.message}`);
     await sendDiscord(message);
 });
