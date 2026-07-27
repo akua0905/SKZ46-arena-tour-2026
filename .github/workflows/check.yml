@@ -2,12 +2,12 @@ name: Lawson Ticket Monitor
 
 on:
   schedule:
-    - cron: "0 0,6,12,18 1-31 1-12 0-6"
+    - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
 
 concurrency:
   group: ticket-monitor
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -42,10 +42,10 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: node monitor.js
 
-      - name: Save ticket data
+      - name: Save ticket data final
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Update ticket monitor data"
+          message: "Update ticket monitor data (final)"
           pull: "--rebase --autostash"
           add: |
             ticket_list.txt
