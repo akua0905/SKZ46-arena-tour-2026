@@ -67,7 +67,7 @@ ${diff}
 【ローチケURL】
 ${TARGET_URL}
 
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildNoChangeMessage() {
@@ -77,7 +77,7 @@ ${nowJP()}
 【ローチケURL】
 ${TARGET_URL}
 
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildInitialMessage() {
@@ -90,7 +90,7 @@ ${nowJP()}
 【ローチケURL】
 ${TARGET_URL}
 
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildErrorMessage(errorText) {
@@ -103,7 +103,7 @@ ${errorText}
 【ローチケURL】
 ${TARGET_URL}
 
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildNoticeMessage(title, text) {
@@ -116,7 +116,7 @@ ${text}
 【ローチケURL】
 ${TARGET_URL}
 
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 // =====================
