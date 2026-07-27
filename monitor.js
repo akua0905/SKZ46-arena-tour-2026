@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (新フォーマット版)
+// monitor.js
 // =====================
 
 import fs from "fs";
@@ -59,59 +59,64 @@ function commitAndPush(commitMessage) {
 
 function buildChangeMessage(diff) {
     return `【ローチケ監視｜⚠️変更検知】
-　　　${nowJP()}
+　${nowJP()}
 
-【更新内容】─────────────
+【更新内容】
 ${diff}
 
-【ローチケURL】───────────
+【ローチケURL】
 ${TARGET_URL}
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildNoChangeMessage() {
     return `【ローチケ監視｜変更なし】
-　　${nowJP()}
+${nowJP()}
 
-【ローチケURL】───────────
+【ローチケURL】
 ${TARGET_URL}
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildInitialMessage() {
     return `【ローチケ監視｜初回登録】
-　　${nowJP()}
+${nowJP()}
 
-【更新内容】─────────────
+【更新内容】
 初回データを登録しました。
 
-【ローチケURL】───────────
+【ローチケURL】
 ${TARGET_URL}
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildErrorMessage(errorText) {
     return `【ローチケ監視｜エラー】
-　　${nowJP()}
+${nowJP()}
 
-【更新内容】─────────────
+【更新内容】
 ${errorText}
 
-【ローチケURL】───────────
+【ローチケURL】
 ${TARGET_URL}
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildNoticeMessage(title, text) {
     return `【ローチケ監視｜${title}】
-　　${nowJP()}
+${nowJP()}
 
-【更新内容】─────────────
+【更新内容】
 ${text}
 
-【ローチケURL】───────────
+【ローチケURL】
 ${TARGET_URL}
-〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 // =====================
@@ -178,10 +183,14 @@ async function getHTML() {
 // HTML整形
 // =====================
 
+const S = String.fromCharCode(42);
+
 function cleanHTML(html) {
+    const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
+    const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
     return html
-        .replace(/<script[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(scriptRegex, "")
+        .replace(styleRegex, "")
         .replace(/<[^>]+>/g, " ")
         .replace(/&nbsp;/g, " ")
         .replace(/\s+/g, " ");
@@ -208,10 +217,9 @@ const AREAS = [
 function extractTickets(html) {
     const text = cleanHTML(html);
     const areaPattern = AREAS.join("|");
-    const regex = new RegExp(
-        `(\\d{1,2}\\.\\d{1,2}.*?)(` + areaPattern + `).*?(発売中|販売中|受付中|予定枚数終了|発売前|受付終了).*?(一般発売.*?(先着|抽選))`,
-        "g"
-    );
+    const anyLazy = "." + S + "?";
+    const pattern = `(\\d{1,2}\\.\\d{1,2}${anyLazy})(${areaPattern})${anyLazy}(発売中|販売中|受付中|予定枚数終了|発売前|受付終了)${anyLazy}(一般発売${anyLazy}(先着|抽選))`;
+    const regex = new RegExp(pattern, "g");
     
     const result = [];
     let match;
