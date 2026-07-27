@@ -1,4 +1,6 @@
-// monitor.js 完成版⑭ コード①
+// =====================
+// monitor.js 完成版①
+// =====================
 
 import fs from "fs";
 
@@ -10,17 +12,17 @@ import fs from "fs";
 const TARGET_URL =
 "https://l-tike.com/concert/mevent/?mid=366800";
 
-
 const EVENT_NAME =
 "櫻坂46 ARENA TOUR 2026";
-
 
 const DISCORD_WEBHOOK =
 process.env.DISCORD_WEBHOOK;
 
-
 const DATA_FILE =
 "ticket_list.txt";
+
+const LAST_DIFF_FILE =
+"last_diff.txt";
 
 
 // =====================
@@ -69,7 +71,6 @@ async function sendDiscord(message){
 
     }
 
-
     for(
         let i=1;
         i<=3;
@@ -94,14 +95,11 @@ async function sendDiscord(message){
                 }
             );
 
-
             console.log(
                 "Discord送信完了"
             );
 
-
             return;
-
 
         }catch(e){
 
@@ -109,7 +107,6 @@ async function sendDiscord(message){
                 `Discord送信失敗 ${i}/3`,
                 e.message
             );
-
 
             await sleep(3000);
 
@@ -139,10 +136,8 @@ async function getHTML(){
                 `取得試行 ${i}/3`
             );
 
-
             const controller =
             new AbortController();
-
 
             const timer =
             setTimeout(
@@ -151,8 +146,6 @@ async function getHTML(){
                 },
                 30000
             );
-
-
 
             const response =
             await fetch(
@@ -183,10 +176,7 @@ async function getHTML(){
                 }
             );
 
-
             clearTimeout(timer);
-
-
 
             if(!response.ok){
 
@@ -196,16 +186,11 @@ async function getHTML(){
 
             }
 
-
-
             console.log(
                 "HTML取得完了"
             );
 
-
             return await response.text();
-
-
 
         }catch(e){
 
@@ -213,7 +198,6 @@ async function getHTML(){
                 "取得失敗:",
                 e.message
             );
-
 
             if(
                 i===3
@@ -223,7 +207,6 @@ async function getHTML(){
 
             }
 
-
             await sleep(3000);
 
         }
@@ -231,6 +214,8 @@ async function getHTML(){
     }
 
 }
+
+
 
 // =====================
 // HTML整形
@@ -334,12 +319,8 @@ function extractTickets(html){
     const text =
     cleanHTML(html);
 
-
-
     const areaPattern =
     AREAS.join("|");
-
-
 
     const regex =
     new RegExp(
@@ -351,13 +332,9 @@ function extractTickets(html){
         "g"
     );
 
-
-
     const result = [];
 
     let match;
-
-
 
     while(
         (match = regex.exec(text))
@@ -371,8 +348,6 @@ ${match[4]}`
         );
 
     }
-
-
 
     return [
         ...new Set(result)
@@ -394,10 +369,7 @@ function getDiff(
     const oldItems =
     oldText.split("\n\n");
 
-
     const changes = [];
-
-
 
     for(
         const newItem of newList
@@ -406,12 +378,8 @@ function getDiff(
         const lines =
         newItem.split("\n");
 
-
-
         const date =
         lines[0];
-
-
 
         const area =
         lines.find(
@@ -419,15 +387,11 @@ function getDiff(
             AREAS.includes(x)
         );
 
-
-
         const newStatus =
         lines.find(
             x =>
             x.startsWith("状態:")
         );
-
-
 
         if(
             !date ||
@@ -439,8 +403,6 @@ function getDiff(
 
         }
 
-
-
         const oldItem =
         oldItems.find(
             x =>
@@ -449,15 +411,11 @@ function getDiff(
             x.includes(area)
         );
 
-
-
         if(!oldItem){
 
             continue;
 
         }
-
-
 
         const oldStatus =
         oldItem
@@ -466,8 +424,6 @@ function getDiff(
             x =>
             x.startsWith("状態:")
         );
-
-
 
         if(
             oldStatus &&
@@ -487,7 +443,6 @@ ${newStatus.replace("状態:","")}`
 
     }
 
-
     return changes.join("\n\n");
 
 }
@@ -502,27 +457,21 @@ async function monitorOnce(){
         "===================="
     );
 
-
     console.log(
         "実行時刻:",
         nowJP()
     );
 
-
     console.log(
         "ローチケ取得開始"
     );
 
-
-
     let html;
-
 
     try{
 
         html =
         await getHTML();
-
 
     }catch(e){
 
@@ -540,49 +489,34 @@ ${nowJP()}
 ${e.message}`
         );
 
-
         return;
 
     }
-
-
 
     console.log(
         "HTML文字数:",
         html.length
     );
 
-
-
     const currentList =
     extractTickets(html);
 
-
-
     const currentText =
     currentList.join("\n\n");
-
-
 
     console.log(
         "===== 抽出結果 ====="
     );
 
-
     console.log(
         currentText
     );
-
 
     console.log(
         "===================="
     );
 
-
-
     let oldText = "";
-
-
 
     if(
         fs.existsSync(DATA_FILE)
@@ -596,18 +530,25 @@ ${e.message}`
 
     }
 
-
+    // 毎回最新内容へ更新
+    fs.writeFileSync(
+        DATA_FILE,
+        currentText,
+        "utf8"
+    );
 
     // 初回登録
-
     if(!oldText){
 
-        fs.writeFileSync(
-            DATA_FILE,
-            currentText
-        );
+        if(
+            fs.existsSync(LAST_DIFF_FILE)
+        ){
 
+            fs.unlinkSync(
+                LAST_DIFF_FILE
+            );
 
+        }
 
         await sendDiscord(
 `🆕 ローチケ監視｜初回登録
@@ -623,12 +564,9 @@ ${nowJP()}
 ${TARGET_URL}`
         );
 
-
         return;
 
     }
-
-
 
     const diff =
     getDiff(
@@ -636,11 +574,31 @@ ${TARGET_URL}`
         currentList
     );
 
+    let lastDiff = "";
 
+    if(
+        fs.existsSync(LAST_DIFF_FILE)
+    ){
+
+        lastDiff =
+        fs.readFileSync(
+            LAST_DIFF_FILE,
+            "utf8"
+        );
+
+    }
 
     // 変更あり
+    if(
+        diff &&
+        diff !== lastDiff
+    ){
 
-    if(diff){
+        fs.writeFileSync(
+            LAST_DIFF_FILE,
+            diff,
+            "utf8"
+        );
 
         await sendDiscord(
 `🎫 ローチケ監視｜変更検知
@@ -658,18 +616,26 @@ ${nowJP()}
 ${TARGET_URL}`
         );
 
-
         console.log(
             "変更通知送信"
         );
 
-
     }
 
-
     // 変更なし
-
     else{
+
+        if(
+            diff === ""
+            &&
+            fs.existsSync(LAST_DIFF_FILE)
+        ){
+
+            fs.unlinkSync(
+                LAST_DIFF_FILE
+            );
+
+        }
 
         await sendDiscord(
 `🟢 ローチケ監視｜変更なし
@@ -683,19 +649,11 @@ ${nowJP()}
 ${TARGET_URL}`
         );
 
-
         console.log(
             "変更なし通知送信"
         );
 
     }
-
-
-
-    fs.writeFileSync(
-        DATA_FILE,
-        currentText
-    );
 
 }
 
@@ -703,7 +661,7 @@ ${TARGET_URL}`
 
 // =====================
 // 次回確認時刻
-// 00分・20分・40分
+// 00・05・10・15・20・25・30・35・40・45・50・55
 // =====================
 
 function getNextCheckTime(){
@@ -711,25 +669,20 @@ function getNextCheckTime(){
     const now =
     new Date();
 
-
-
-    const minutes =
-[
-    0,
-    5,
-    10,
-    15,
-    20,
-    25,
-    30,
-    35,
-    40,
-    45,
-    50,
-    55
-];
-
-
+    const minutes = [
+        0,
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        50,
+        55
+    ];
 
     for(
         const minute of minutes
@@ -738,15 +691,11 @@ function getNextCheckTime(){
         const next =
         new Date(now);
 
-
-
         next.setMinutes(
             minute,
             0,
             0
         );
-
-
 
         if(
             next > now
@@ -758,12 +707,8 @@ function getNextCheckTime(){
 
     }
 
-
-
     const nextHour =
     new Date(now);
-
-
 
     nextHour.setHours(
         nextHour.getHours()+1,
@@ -772,16 +717,12 @@ function getNextCheckTime(){
         0
     );
 
-
-
     return nextHour;
 
 }
 
-
-
 // =====================
-// 6時間監視
+// 約5時間55分監視
 // =====================
 
 async function mainLoop(){
@@ -789,36 +730,46 @@ async function mainLoop(){
     const endTime =
     Date.now()
     +
-    6 * 60 * 60 * 1000;
-
-
+    (
+        (5 * 60 + 55)
+        * 60
+        * 1000
+    );
 
     console.log(
         "監視開始:",
         nowJP()
     );
 
-
-
     while(
-        Date.now() < endTime
+        true
     ){
+
+        if(
+            Date.now() >= endTime
+        ){
+
+            break;
+
+        }
 
         await monitorOnce();
 
-
-
         const next =
         getNextCheckTime();
-
-
 
         const wait =
         next.getTime()
         -
         Date.now();
 
+        if(
+            Date.now() + wait >= endTime
+        ){
 
+            break;
+
+        }
 
         console.log(
 `次回確認:
@@ -827,28 +778,28 @@ ${next.toLocaleString(
 )}`
         );
 
+        if(
+            wait > 0
+        ){
 
+            await sleep(
+                wait
+            );
 
-        await sleep(
-            wait
-        );
+        }
 
     }
-
-
 
     await sendDiscord(
 `⏹️ ローチケ監視終了
 
 ${EVENT_NAME}
 
-6時間監視完了
+約5時間55分監視完了
 
 終了時刻:
 ${nowJP()}`
     );
-
-
 
     console.log(
         "監視終了"
@@ -869,7 +820,6 @@ mainLoop()
         console.error(
             e
         );
-
 
         await sendDiscord(
 `⚠️ ローチケ監視｜エラー
