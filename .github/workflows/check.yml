@@ -3,42 +3,35 @@ name: Lawson Ticket Monitor
 on:
   schedule:
     - cron: "0 */6 * * *"
-
   workflow_dispatch:
 
+concurrency:
+  group: ticket-monitor
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
-
 jobs:
-
   monitor:
-
     runs-on: ubuntu-latest
 
-
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
-
       - name: Install packages
         run: npm install
-
 
       - name: Run monitor
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: node monitor.js
-
 
       - name: Save ticket data
         uses: EndBug/add-and-commit@v9
@@ -46,3 +39,4 @@ jobs:
           message: "Update ticket monitor data"
           add: |
             ticket_list.txt
+            last_diff.txt
