@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (即時Git Push対応版)
+// monitor.js (フォーマット更新版)
 // =====================
 
 import fs from "fs";
@@ -56,14 +56,71 @@ function commitAndPush(commitMessage) {
 // Discord通知フォーマット生成
 // =====================
 
-function buildMessage(title, content = "") {
-    let msg = `${title}\n［${EVENT_NAME}］\n----------------------\n`;
-    if (content) {
-        msg += `【内容】\n${content}\n----------------------\n`;
-    }
-    msg += `【確認時間】\n${nowJP()}\n----------------------\n`;
-    msg += `【ローチケURL】\n${TARGET_URL}\n--------------------------------`;
-    return msg;
+function buildChangeMessage(diff) {
+    return `⬛︎ローチケ監視｜⚠️変更検知
+Time ${nowJP()}
+──────────
+［${EVENT_NAME}］
+──────────
+【内容】
+${diff}
+──────────
+【ローチケURL】
+${TARGET_URL}
+───────────────┘`;
+}
+
+function buildNoChangeMessage() {
+    return `⬜︎ローチケ監視｜変更なし
+Time ${nowJP()}
+──────────
+［${EVENT_NAME}］
+──────────
+【ローチケURL】
+${TARGET_URL}
+───────────────┘`;
+}
+
+function buildInitialMessage() {
+    return `⬛︎ローチケ監視｜初回登録
+Time ${nowJP()}
+──────────
+［${EVENT_NAME}］
+──────────
+【内容】
+初回データを登録しました。
+──────────
+【ローチケURL】
+${TARGET_URL}
+───────────────┘`;
+}
+
+function buildErrorMessage(errorText) {
+    return `⬛︎ローチケ監視｜エラー
+Time ${nowJP()}
+──────────
+［${EVENT_NAME}］
+──────────
+【内容】
+${errorText}
+──────────
+【ローチケURL】
+${TARGET_URL}
+───────────────┘`;
+}
+
+function buildNoticeMessage(title, text) {
+    return `⬛︎ローチケ監視｜${title}
+Time ${nowJP()}
+──────────
+［${EVENT_NAME}］
+──────────
+【内容】
+${text}
+──────────
+【ローチケURL】
+${TARGET_URL}
+───────────────┘`;
 }
 
 // =====================
@@ -201,7 +258,7 @@ function getDiff(oldText, newList) {
         
         if (oldStatus && oldStatus !== newStatus) {
             changes.push(
-`${area}
+`☆${area}☆
 ${date}
 
 ${oldStatus.replace("状態:", "")}
@@ -226,7 +283,7 @@ async function monitorOnce() {
     try {
         html = await getHTML();
     } catch (e) {
-        const message = buildMessage("ローチケ監視｜エラー", `取得失敗: ${e.message}`);
+        const message = buildErrorMessage(`取得失敗: ${e.message}`);
         await sendDiscord(message);
         return;
     }
@@ -248,7 +305,7 @@ async function monitorOnce() {
             fs.unlinkSync(LAST_DIFF_FILE);
         }
         commitAndPush("Update initial ticket data");
-        const message = buildMessage("ローチケ監視｜初回登録", "初回データを登録しました。");
+        const message = buildInitialMessage();
         await sendDiscord(message);
         return;
     }
@@ -264,7 +321,7 @@ async function monitorOnce() {
     if (diff && diff !== lastDiff) {
         fs.writeFileSync(LAST_DIFF_FILE, diff, "utf8");
         commitAndPush(`Update ticket status diff: ${nowJP()}`);
-        const message = buildMessage("●ローチケ監視｜変更検知", diff);
+        const message = buildChangeMessage(diff);
         await sendDiscord(message);
         console.log("変更通知送信＆即時Push完了");
     }
@@ -274,7 +331,7 @@ async function monitorOnce() {
             fs.unlinkSync(LAST_DIFF_FILE);
             commitAndPush("Reset last diff");
         }
-        const message = buildMessage("○ローチケ監視｜変更なし");
+        const message = buildNoChangeMessage();
         await sendDiscord(message);
         console.log("変更なし通知送信");
     }
@@ -316,8 +373,8 @@ async function mainLoop() {
 
         if (elapsedTime >= NOTICE_TIME_MS && !isNoticeSent) {
             isNoticeSent = true;
-            const noticeMessage = buildMessage(
-                "ローチケ監視｜まもなく再起動",
+            const noticeMessage = buildNoticeMessage(
+                "まもなく再起動",
                 "監視開始から5時間50分が経過しました。\n約8分後の5時間58分時点で一旦停止し、次のスケジュールで再起動します。"
             );
             await sendDiscord(noticeMessage);
@@ -336,8 +393,8 @@ async function mainLoop() {
         if (wait > 0) await sleep(wait);
     }
 
-    const endMessage = buildMessage(
-        "ローチケ監視｜一旦停止",
+    const endMessage = buildNoticeMessage(
+        "一旦停止",
         "5時間58分の監視期間が経過したため一旦停止します。\nデータの保存を行い、次の定刻に自動再起動します。"
     );
     await sendDiscord(endMessage);
@@ -350,6 +407,6 @@ async function mainLoop() {
 
 mainLoop().catch(async (e) => {
     console.error(e);
-    const message = buildMessage("ローチケ監視｜重大なエラー", `予期せぬエラー: ${e.message}`);
+    const message = buildErrorMessage(`予期せぬエラー: ${e.message}`);
     await sendDiscord(message);
 });
