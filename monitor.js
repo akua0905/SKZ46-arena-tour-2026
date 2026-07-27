@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (フォーマット更新版)
+// monitor.js (新フォーマット版)
 // =====================
 
 import fs from "fs";
@@ -37,12 +37,13 @@ function sleep(ms) {
 
 function commitAndPush(commitMessage) {
     try {
+        const branch = process.env.GITHUB_REF_NAME || "main";
         execSync('git config user.name "github-actions[bot]"');
         execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
         execSync(`git add ${DATA_FILE} ${LAST_DIFF_FILE}`);
         try {
             execSync(`git commit -m "${commitMessage}"`);
-            execSync("git push");
+            execSync(`git push origin HEAD:${branch}`);
             console.log("GitHubへ即時保存完了");
         } catch (e) {
             console.log("Gitコミット対象なし、または書き込み不要");
@@ -57,70 +58,60 @@ function commitAndPush(commitMessage) {
 // =====================
 
 function buildChangeMessage(diff) {
-    return `⬛︎ローチケ監視｜⚠️変更検知
-Time ${nowJP()}
-──────────
-［${EVENT_NAME}］
-──────────
-【内容】
+    return `【ローチケ監視｜⚠️変更検知】
+　　　${nowJP()}
+
+【更新内容】─────────────
 ${diff}
-──────────
-【ローチケURL】
+
+【ローチケURL】───────────
 ${TARGET_URL}
-───────────────┘`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildNoChangeMessage() {
-    return `⬜︎ローチケ監視｜変更なし
-Time ${nowJP()}
-──────────
-［${EVENT_NAME}］
-──────────
-【ローチケURL】
+    return `【ローチケ監視｜変更なし】
+　　${nowJP()}
+
+【ローチケURL】───────────
 ${TARGET_URL}
-───────────────┘`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildInitialMessage() {
-    return `⬛︎ローチケ監視｜初回登録
-Time ${nowJP()}
-──────────
-［${EVENT_NAME}］
-──────────
-【内容】
+    return `【ローチケ監視｜初回登録】
+　　${nowJP()}
+
+【更新内容】─────────────
 初回データを登録しました。
-──────────
-【ローチケURL】
+
+【ローチケURL】───────────
 ${TARGET_URL}
-───────────────┘`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildErrorMessage(errorText) {
-    return `⬛︎ローチケ監視｜エラー
-Time ${nowJP()}
-──────────
-［${EVENT_NAME}］
-──────────
-【内容】
+    return `【ローチケ監視｜エラー】
+　　${nowJP()}
+
+【更新内容】─────────────
 ${errorText}
-──────────
-【ローチケURL】
+
+【ローチケURL】───────────
 ${TARGET_URL}
-───────────────┘`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 function buildNoticeMessage(title, text) {
-    return `⬛︎ローチケ監視｜${title}
-Time ${nowJP()}
-──────────
-［${EVENT_NAME}］
-──────────
-【内容】
+    return `【ローチケ監視｜${title}】
+　　${nowJP()}
+
+【更新内容】─────────────
 ${text}
-──────────
-【ローチケURL】
+
+【ローチケURL】───────────
 ${TARGET_URL}
-───────────────┘`;
+〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
 }
 
 // =====================
