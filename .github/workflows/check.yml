@@ -2,7 +2,7 @@ name: Lawson Ticket Monitor
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 0,6,12,18 1-31 1-12 0-6"
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +19,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Pull latest changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin ${{ github.ref_name }} --rebase || true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -37,6 +46,7 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           message: "Update ticket monitor data"
+          pull: "--rebase --autostash"
           add: |
             ticket_list.txt
             last_diff.txt
