@@ -313,45 +313,64 @@ function getNextCheckTime() {
 }
 
 // =====================
-// メインループ（約5時間55分）
+// メインループ（5時間58分運用）
 // =====================
 
 async function mainLoop() {
-    // 21300000ミリ秒 = 5時間55分
-    const duration = 21300000;
-    const endTime = Date.now() + duration;
-    
+    // 時間設定（ミリ秒）
+    const NOTICE_TIME_MS = 21000000; // 5時間50分
+    const END_TIME_MS = 21480000;    // 5時間58分
+
+    const startTime = Date.now();
+    const endTime = startTime + END_TIME_MS;
+    let isNoticeSent = false;
+
     console.log("監視開始:", nowJP());
-    
+
     while (true) {
+        const elapsedTime = Date.now() - startTime;
+
+        // 5時間50分経過時の事前通知（1回のみ実行）
+        if (elapsedTime >= NOTICE_TIME_MS && !isNoticeSent) {
+            isNoticeSent = true;
+            const noticeMessage = buildMessage(
+                "ローチケ監視｜まもなく再起動",
+                "監視開始から5時間50分が経過しました。\n約8分後の5時間58分時点で一旦停止し、次のスケジュールで再起動します。"
+            );
+            await sendDiscord(noticeMessage);
+            console.log("まもなく再起動通知送信");
+        }
+
+        // 5時間58分経過でループ終了
         if (Date.now() >= endTime) {
             break;
         }
-        
+
         await monitorOnce();
-        
+
         const next = getNextCheckTime();
         const wait = next.getTime() - Date.now();
-        
-        // 次回の待機で終了時刻を超える場合は待機せずに終了
+
+        // 次の待機を行うと5時間58分を超える場合は待機せず終了
         if (Date.now() + wait >= endTime) {
             break;
         }
-        
+
         console.log(`次回確認:\n${next.toLocaleString("ja-JP")}`);
-        
+
         if (wait > 0) {
             await sleep(wait);
         }
     }
-    
-    const message = buildMessage(
-        "■ローチケ監視｜終了",
-        "約5時間55分の監視を完了しました。"
+
+    const endMessage = buildMessage(
+        "ローチケ監視｜一旦停止",
+        "5時間58分の監視期間が経過したため一旦停止します。\nデータの保存を行い、次の定刻に自動再起動します。"
     );
-    await sendDiscord(message);
+    await sendDiscord(endMessage);
     console.log("監視終了");
 }
+
 
 // =====================
 // 実行
