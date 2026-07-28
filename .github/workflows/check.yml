@@ -22,4 +22,4 @@ jobs:
       - name: Run monitor scripts
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-        run: node monitor.js & node monitor_detail.js
+        run: node monitor.js
