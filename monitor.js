@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (統合版)
+// monitor.js (一覧監視専用)
 // =====================
 
 import fs from "fs";
@@ -9,12 +9,9 @@ import { execSync } from "child_process";
 // 設定
 // =====================
 
-const URL_LIST = "https://l-tike.com/concert/mevent/?mid=366800";
-const URL_CHIBA = "https://l-tike.com/order/?gLcode=94035&gPfKey=20260410000002181264,20260410000002181263&gEntryMthd=02&gScheduleNo=9&gCarrierCd=01&gPfName=櫻坂４６&gBaseVenueCd=34275";
-
+const TARGET_URL = "https://l-tike.com/concert/mevent/?mid=366800";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
-const DATA_FILE = "combined_ticket_data.txt";
-const LAST_DIFF_FILE = "last_combined_diff.txt";
+const DATA_FILE = "ticket_list_data.txt";
 
 // =====================
 // 日本時間取得
@@ -49,12 +46,8 @@ function pullLatest() {
 function commitAndPush(commitMessage) {
     try {
         const branch = process.env.GITHUB_REF_NAME || "main";
-        let filesToAdd = [];
-        if (fs.existsSync(DATA_FILE)) filesToAdd.push(DATA_FILE);
-        if (fs.existsSync(LAST_DIFF_FILE)) filesToAdd.push(LAST_DIFF_FILE);
-        
-        if (filesToAdd.length > 0) {
-            execSync(`git add ${filesToAdd.join(" ")}`);
+        if (fs.existsSync(DATA_FILE)) {
+            execSync(`git add ${DATA_FILE}`);
         }
 
         try {
@@ -100,7 +93,7 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理
+// 解析処理（一覧用）
 // =====================
 
 const S = String.fromCharCode(42);
@@ -116,7 +109,6 @@ function cleanHTML(html) {
         .replace(/\s+/g, " ");
 }
 
-// 1. 一覧ページ用抽出
 function parseList(html) {
     const text = cleanHTML(html);
     const prefPattern = "(愛知県|福岡県|神奈川県|大阪府|徳島県|千葉県|埼玉県)";
@@ -129,24 +121,6 @@ function parseList(html) {
         result.push(`${match[1]}: ${match[2]}`);
     }
     return [...new Set(result)].join("\n");
-}
-
-// 2. 千葉詳細用抽出
-function parseChiba(html) {
-    const text = cleanHTML(html);
-    const datePattern = "\\d{4}\\/\\d{1,2}\\/\\d{1,2}\\([月火水木金土日]\\)";
-    const statusPattern = "(予定枚数終了|発売中|販売中|受付中|受付終了|発売前)";
-    const anyLazy = "." + S + "?";
-    
-    const pattern = `(${datePattern})${anyLazy}${statusPattern}${anyLazy}(\\[開場\\]\\s*\\d{1,2}:\\d{2})${anyLazy}(\\[開演\\]\\s*\\d{1,2}:\\d{2})`;
-    const regex = new RegExp(pattern, "g");
-    
-    const result = [];
-    let match;
-    while ((match = regex.exec(text))) {
-        result.push(`${match[1]}\n状態:${match[2]}\n${match[3]}\n${match[4]}`);
-    }
-    return [...new Set(result)].join("\n\n");
 }
 
 // =====================
@@ -179,22 +153,14 @@ async function monitorOnce() {
     
     pullLatest();
 
-    let listText = "";
-    let chibaText = "";
-
+    let currentText = "";
     try {
-        const listHtml = await fetchHTML(URL_LIST);
-        listText = parseList(listHtml);
-        
-        const chibaHtml = await fetchHTML(URL_CHIBA);
-        chibaText = parseChiba(chibaHtml);
+        const html = await fetchHTML(TARGET_URL);
+        currentText = parseList(html);
     } catch (e) {
         console.error("データ取得失敗:", e.message);
         return;
     }
-
-    // 上部：一覧 / 下部：千葉詳細
-    const currentCombined = `【都道府県一覧】\n${listText}\n\n====================\n\n【千葉公演詳細】\n${chibaText}`;
 
     let oldText = "";
     if (fs.existsSync(DATA_FILE)) {
@@ -203,24 +169,24 @@ async function monitorOnce() {
 
     // 初回登録
     if (!oldText.trim()) {
-        fs.writeFileSync(DATA_FILE, currentCombined, "utf8");
-        commitAndPush("Update initial combined ticket data");
+        fs.writeFileSync(DATA_FILE, currentText, "utf8");
+        commitAndPush("Update initial ticket list data");
         
-        const msg = `【ローチケ監視｜初回登録】\n${nowJP()}\n\n${currentCombined}\n\n【一覧URL】\n${URL_LIST}\n\n【千葉詳細URL】\n${URL_CHIBA}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【状況】\n${currentText}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         return;
     }
 
     // 変更判定
-    if (oldText !== currentCombined) {
-        fs.writeFileSync(DATA_FILE, currentCombined, "utf8");
-        commitAndPush(`Update ticket data diff: ${nowJP()}`);
+    if (oldText !== currentText) {
+        fs.writeFileSync(DATA_FILE, currentText, "utf8");
+        commitAndPush(`Update ticket list status diff: ${nowJP()}`);
         
-        const msg = `【ローチケ監視｜変更検知】\n${nowJP()}\n\n${currentCombined}\n\n【一覧URL】\n${URL_LIST}\n\n【千葉詳細URL】\n${URL_CHIBA}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜変更検知】\n${nowJP()}\n\n【最新状況】\n${currentText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         console.log("変更検知・通知完了");
     } else {
-        const msg = `【ローチケ監視｜変更なし】\n${nowJP()}\n\n【一覧URL】\n${URL_LIST}\n\n【千葉詳細URL】\n${URL_CHIBA}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜変更なし】\n${nowJP()}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         console.log("変更なし通知完了");
     }
@@ -252,7 +218,7 @@ async function mainLoop() {
     const startTime = Date.now();
     const endTime = startTime + END_TIME_MS;
 
-    console.log("統合監視開始:", nowJP());
+    console.log("一覧監視開始:", nowJP());
 
     while (true) {
         if (Date.now() >= endTime) break;
@@ -264,7 +230,7 @@ async function mainLoop() {
 
         if (Date.now() + wait >= endTime) break;
 
-        console.log(`次回確認: ${next.toLocaleString("ja-JP")}`);
+        console.log(`次回確認: ${next.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`);
         if (wait > 0) await sleep(wait);
     }
     console.log("監視終了");
