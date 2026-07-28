@@ -32,15 +32,33 @@ function sleep(ms) {
 }
 
 // =====================
-// Gitコミット＆プッシュ
+// Git最新化＆コミット・プッシュ
 // =====================
+
+function pullLatest() {
+    try {
+        const branch = process.env.GITHUB_REF_NAME || "main";
+        execSync(`git pull origin ${branch}`);
+        console.log("リポジトリ最新化完了");
+    } catch (e) {
+        console.log("Git Pullスキップまたは失敗:", e.message);
+    }
+}
 
 function commitAndPush(commitMessage) {
     try {
         const branch = process.env.GITHUB_REF_NAME || "main";
         execSync('git config user.name "github-actions[bot]"');
         execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
-        execSync(`git add ${DATA_FILE} ${LAST_DIFF_FILE}`);
+        
+        let filesToAdd = [];
+        if (fs.existsSync(DATA_FILE)) filesToAdd.push(DATA_FILE);
+        if (fs.existsSync(LAST_DIFF_FILE)) filesToAdd.push(LAST_DIFF_FILE);
+        
+        if (filesToAdd.length > 0) {
+            execSync(`git add ${filesToAdd.join(" ")}`);
+        }
+
         try {
             execSync(`git commit -m "${commitMessage}"`);
             execSync(`git push origin HEAD:${branch}`);
@@ -133,9 +151,6 @@ async function sendDiscord(message) {
 
     for (let i = 1; i <= 3; i++) {
         try {
-            const response = await fetch(TARGET_URL, {
-                method: "GET"
-            });
             const res = await fetch(DISCORD_WEBHOOK, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -268,6 +283,10 @@ ${newStatusLine.replace("状態:", "")}`
 async function monitorOnce() {
     console.log("====================");
     console.log("実行時刻:", nowJP());
+    
+    // 判定前に最新のGitHubデータを同期
+    pullLatest();
+
     console.log("ローチケ詳細取得開始");
     
     let html;
@@ -288,10 +307,9 @@ async function monitorOnce() {
         oldText = fs.readFileSync(DATA_FILE, "utf8");
     }
     
-    fs.writeFileSync(DATA_FILE, currentText, "utf8");
-    
-    // 初回登録
+    // 初回登録判定
     if (!oldText) {
+        fs.writeFileSync(DATA_FILE, currentText, "utf8");
         if (fs.existsSync(LAST_DIFF_FILE)) {
             fs.unlinkSync(LAST_DIFF_FILE);
         }
@@ -310,6 +328,7 @@ async function monitorOnce() {
     
     // 変更あり
     if (diff && diff !== lastDiff) {
+        fs.writeFileSync(DATA_FILE, currentText, "utf8");
         fs.writeFileSync(LAST_DIFF_FILE, diff, "utf8");
         commitAndPush(`Update ticket detail status diff: ${nowJP()}`);
         const message = buildChangeMessage(diff);
