@@ -1,5 +1,5 @@
 // =====================
-// monitor.js
+// monitor_detail.js
 // =====================
 
 import fs from "fs";
@@ -9,11 +9,11 @@ import { execSync } from "child_process";
 // 設定
 // =====================
 
-const TARGET_URL = "https://l-tike.com/concert/mevent/?mid=366800";
-const EVENT_NAME = "櫻坂46 ARENA TOUR 2026";
+const TARGET_URL = "https://l-tike.com/order/?gLcode=94035&gPfKey=20260410000002181264,20260410000002181263&gEntryMthd=02&gScheduleNo=9&gCarrierCd=01&gPfName=櫻坂４６&gBaseVenueCd=34275";
+const EVENT_NAME = "櫻坂46 ARENA TOUR 2026 (千葉公演詳細)";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
-const DATA_FILE = "ticket_list.txt";
-const LAST_DIFF_FILE = "last_diff.txt";
+const DATA_FILE = "ticket_detail_list.txt";
+const LAST_DIFF_FILE = "last_detail_diff.txt";
 
 // =====================
 // 日本時間取得
@@ -32,7 +32,7 @@ function sleep(ms) {
 }
 
 // =====================
-// Gitコミット＆プッシュ（即時保存）
+// Gitコミット＆プッシュ
 // =====================
 
 function commitAndPush(commitMessage) {
@@ -40,7 +40,7 @@ function commitAndPush(commitMessage) {
         const branch = process.env.GITHUB_REF_NAME || "main";
         execSync('git config user.name "github-actions[bot]"');
         execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
-        execSync(`git add ${DATA_FILE} ${LAST_DIFF_FILE}`);
+        execSync(`git add --ignore-unmatch ${DATA_FILE} ${LAST_DIFF_FILE}`);
         try {
             execSync(`git commit -m "${commitMessage}"`);
             execSync(`git push origin HEAD:${branch}`);
@@ -58,7 +58,7 @@ function commitAndPush(commitMessage) {
 // =====================
 
 function buildChangeMessage(diff) {
-    return `【ローチケ監視｜⚠️変更検知】
+    return `【ローチケ詳細監視｜⚠️変更検知】
 　${nowJP()}
 
 【更新内容】
@@ -72,7 +72,7 @@ ${TARGET_URL}
 }
 
 function buildNoChangeMessage() {
-    return `【ローチケ監視｜変更なし】
+    return `【ローチケ詳細監視｜変更なし】
 ${nowJP()}
 
 【ローチケURL】
@@ -82,11 +82,11 @@ ${TARGET_URL}
 }
 
 function buildInitialMessage() {
-    return `【ローチケ監視｜初回登録】
+    return `【ローチケ詳細監視｜初回登録】
 ${nowJP()}
 
 【更新内容】
-初回データを登録しました。
+初回詳細データを登録しました。
 
 【ローチケURL】
 ${TARGET_URL}
@@ -95,7 +95,7 @@ ${TARGET_URL}
 }
 
 function buildErrorMessage(errorText) {
-    return `【ローチケ監視｜エラー】
+    return `【ローチケ詳細監視｜エラー】
 ${nowJP()}
 
 【更新内容】
@@ -108,7 +108,7 @@ ${TARGET_URL}
 }
 
 function buildNoticeMessage(title, text) {
-    return `【ローチケ監視｜${title}】
+    return `【ローチケ詳細監視｜${title}】
 ${nowJP()}
 
 【更新内容】
@@ -133,17 +133,17 @@ async function sendDiscord(message) {
 
     for (let i = 1; i <= 3; i++) {
         try {
-            const response = await fetch(DISCORD_WEBHOOK, {
+            const res = await fetch(DISCORD_WEBHOOK, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content: message })
             });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             console.log("Discord送信完了");
             return;
         } catch (e) {
             console.log(`Discord送信失敗 ${i}/3`, e.message);
-            await sleep(i * 3000);
+            await sleep(i === 1 ? 3000 : (i === 2 ? 6000 : 9000));
         }
     }
 }
@@ -176,7 +176,7 @@ async function getHTML() {
         } catch (e) {
             console.log("取得失敗:", e.message);
             if (i === 3) throw e;
-            await sleep(i * 3000);
+            await sleep(i === 1 ? 3000 : (i === 2 ? 6000 : 9000));
         }
     }
 }
@@ -199,37 +199,26 @@ function cleanHTML(html) {
 }
 
 // =====================
-// 都道府県一覧
-// =====================
-
-const AREAS = [
-    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", 
-    "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県", 
-    "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", 
-    "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", 
-    "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", 
-    "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", 
-    "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
-];
-
-// =====================
-// チケット抽出
+// 日程・時間・ステータス抽出
 // =====================
 
 function extractTickets(html) {
     const text = cleanHTML(html);
-    const areaPattern = AREAS.join("|");
+    const datePattern = "\\d{4}\\/\\d{1,2}\\/\\d{1,2}\\([月火水木金土日]\\)";
+    const statusPattern = "(予定枚数終了|発売中|販売中|受付中|受付終了|発売前)";
     const anyLazy = "." + S + "?";
-    const pattern = `(\\d{1,2}\\.\\d{1,2}${anyLazy})(${areaPattern})${anyLazy}(発売中|販売中|受付中|予定枚数終了|発売前|受付終了)${anyLazy}(一般発売${anyLazy}(先着|抽選))`;
+    
+    const pattern = `(${datePattern})${anyLazy}${statusPattern}${anyLazy}(\\[開場\\]\\s*\\d{1,2}:\\d{2})${anyLazy}(\\[開演\\]\\s*\\d{1,2}:\\d{2})`;
     const regex = new RegExp(pattern, "g");
     
     const result = [];
     let match;
     while ((match = regex.exec(text))) {
         result.push(
-`${match[1].trim()}
-${match[2]}
-状態:${match[3]}
+`${match[1]}
+
+状態:${match[2]}
+${match[3]}
 ${match[4]}`
         );
     }
@@ -247,24 +236,22 @@ function getDiff(oldText, newList) {
     for (const newItem of newList) {
         const lines = newItem.split("\n");
         const date = lines[0];
-        const area = lines.find(x => AREAS.includes(x));
-        const newStatus = lines.find(x => x.startsWith("状態:"));
+        const newStatusLine = lines.find(x => x.startsWith("状態:"));
         
-        if (!date || !area || !newStatus) continue;
+        if (!date || !newStatusLine) continue;
         
-        const oldItem = oldItems.find(x => x.includes(date) && x.includes(area));
+        const oldItem = oldItems.find(x => x.includes(date));
         if (!oldItem) continue;
         
-        const oldStatus = oldItem.split("\n").find(x => x.startsWith("状態:"));
+        const oldStatusLine = oldItem.split("\n").find(x => x.startsWith("状態:"));
         
-        if (oldStatus && oldStatus !== newStatus) {
+        if (oldStatusLine && oldStatusLine !== newStatusLine) {
             changes.push(
-`☆${area}☆
-${date}
+`${date}
 
-${oldStatus.replace("状態:", "")}
+${oldStatusLine.replace("状態:", "")}
 ↓
-${newStatus.replace("状態:", "")}`
+${newStatusLine.replace("状態:", "")}`
             );
         }
     }
@@ -278,7 +265,7 @@ ${newStatus.replace("状態:", "")}`
 async function monitorOnce() {
     console.log("====================");
     console.log("実行時刻:", nowJP());
-    console.log("ローチケ取得開始");
+    console.log("ローチケ詳細取得開始");
     
     let html;
     try {
@@ -305,7 +292,7 @@ async function monitorOnce() {
         if (fs.existsSync(LAST_DIFF_FILE)) {
             fs.unlinkSync(LAST_DIFF_FILE);
         }
-        commitAndPush("Update initial ticket data");
+        commitAndPush("Update initial detail ticket data");
         const message = buildInitialMessage();
         await sendDiscord(message);
         return;
@@ -321,7 +308,7 @@ async function monitorOnce() {
     // 変更あり
     if (diff && diff !== lastDiff) {
         fs.writeFileSync(LAST_DIFF_FILE, diff, "utf8");
-        commitAndPush(`Update ticket status diff: ${nowJP()}`);
+        commitAndPush(`Update ticket detail status diff: ${nowJP()}`);
         const message = buildChangeMessage(diff);
         await sendDiscord(message);
         console.log("変更通知送信＆即時Push完了");
@@ -330,7 +317,7 @@ async function monitorOnce() {
     else {
         if (diff === "" && fs.existsSync(LAST_DIFF_FILE)) {
             fs.unlinkSync(LAST_DIFF_FILE);
-            commitAndPush("Reset last diff");
+            commitAndPush("Reset last detail diff");
         }
         const message = buildNoChangeMessage();
         await sendDiscord(message);
@@ -367,7 +354,7 @@ async function mainLoop() {
     const endTime = startTime + END_TIME_MS;
     let isNoticeSent = false;
 
-    console.log("監視開始:", nowJP());
+    console.log("詳細監視開始:", nowJP());
 
     while (true) {
         const elapsedTime = Date.now() - startTime;
@@ -376,7 +363,7 @@ async function mainLoop() {
             isNoticeSent = true;
             const noticeMessage = buildNoticeMessage(
                 "まもなく再起動",
-                "監視開始から5時間50分が経過しました。\n約8分後の5時間58分時点で一旦停止し、次のスケジュールで再起動します。"
+                "詳細監視開始から5時間50分が経過しました。\n約8分後の5時間58分時点で一旦停止し、次のスケジュールで再起動します。"
             );
             await sendDiscord(noticeMessage);
         }
@@ -396,10 +383,10 @@ async function mainLoop() {
 
     const endMessage = buildNoticeMessage(
         "一旦停止",
-        "5時間58分の監視期間が経過したため一旦停止します。\nデータの保存を行い、次の定刻に自動再起動します。"
+        "5時間58分の詳細監視期間が経過したため一旦停止します。\nデータの保存を行い、次の定刻に自動再起動します。"
     );
     await sendDiscord(endMessage);
-    console.log("監視終了");
+    console.log("詳細監視終了");
 }
 
 // =====================
