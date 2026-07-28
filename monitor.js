@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (一覧監視専用)
+// monitor.js (一覧監視・高精度版)
 // =====================
 
 import fs from "fs";
@@ -93,34 +93,50 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理（一覧用）
+// 解析処理（漏れなく全体を取得）
 // =====================
 
 const S = String.fromCharCode(42);
 
-function cleanHTML(html) {
+function extractPageContent(html) {
+    // script/style/commentを削除
     const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
     const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
-    return html
+    const commentRegex = new RegExp("<!--[\\s\\S]" + S + "?-->", "gi");
+
+    let cleaned = html
         .replace(scriptRegex, "")
         .replace(styleRegex, "")
-        .replace(/<[^>]+>/g, " ")
+        .replace(commentRegex, "");
+
+    // メインのコンテンツ領域（なければbody）を抽出
+    let mainMatch = cleaned.match(/<main[\\s\\S]*?<\/main>/i) || cleaned.match(/<body[\\s\\S]*?<\/body>/i);
+    let targetHtml = mainMatch ? mainMatch[0] : cleaned;
+
+    // タグを除去して余白を整理
+    let text = targetHtml
+        .replace(/<[^>]+>/g, "\n")
         .replace(/&nbsp;/g, " ")
-        .replace(/\s+/g, " ");
+        .replace(/&amp;/g, "&")
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .join("\n");
+
+    return text;
 }
 
-function parseList(html) {
-    const text = cleanHTML(html);
-    const prefPattern = "(愛知県|福岡県|神奈川県|大阪府|徳島県|千葉県|埼玉県)";
-    const statusPattern = "(予定枚数終了|発売中|販売中|受付中|受付終了|発売前)";
-    const regex = new RegExp(`(${prefPattern}).${S}?(${statusPattern})`, "g");
-    
-    const result = [];
-    let match;
-    while ((match = regex.exec(text))) {
-        result.push(`${match[1]}: ${match[2]}`);
+// 送信用に都道府県・状態をわかりやすく整理（見易さ用）
+function formatForDiscord(rawText) {
+    const lines = rawText.split("\n");
+    const filtered = lines.filter(line => 
+        /(愛知|福岡|神奈川|大阪|徳島|千葉|埼玉|発売|受付|予定枚数|販売|終了|完売)/.test(line)
+    );
+    if (filtered.length === 0) {
+        // 条件に引っかからない場合は先頭数行を表示
+        return lines.slice(0, 15).join("\n");
     }
-    return [...new Set(result)].join("\n");
+    return filtered.slice(0, 30).join("\n");
 }
 
 // =====================
@@ -153,10 +169,10 @@ async function monitorOnce() {
     
     pullLatest();
 
-    let currentText = "";
+    let fullText = "";
     try {
         const html = await fetchHTML(TARGET_URL);
-        currentText = parseList(html);
+        fullText = extractPageContent(html);
     } catch (e) {
         console.error("データ取得失敗:", e.message);
         return;
@@ -167,22 +183,24 @@ async function monitorOnce() {
         oldText = fs.readFileSync(DATA_FILE, "utf8");
     }
 
+    const summaryText = formatForDiscord(fullText);
+
     // 初回登録
     if (!oldText.trim()) {
-        fs.writeFileSync(DATA_FILE, currentText, "utf8");
+        fs.writeFileSync(DATA_FILE, fullText, "utf8");
         commitAndPush("Update initial ticket list data");
         
-        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【状況】\n${currentText}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【概要（一部抜粋）】\n${summaryText}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         return;
     }
 
-    // 変更判定
-    if (oldText !== currentText) {
-        fs.writeFileSync(DATA_FILE, currentText, "utf8");
+    // 変更判定（ページ全体テキストの完全比較）
+    if (oldText !== fullText) {
+        fs.writeFileSync(DATA_FILE, fullText, "utf8");
         commitAndPush(`Update ticket list status diff: ${nowJP()}`);
         
-        const msg = `【ローチケ一覧監視｜変更検知】\n${nowJP()}\n\n【最新状況】\n${currentText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜変更検知】\n${nowJP()}\n\n【最新状況（一部抜粋）】\n${summaryText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         console.log("変更検知・通知完了");
     } else {
