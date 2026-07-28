@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (完全全画面監視版)
+// monitor.js (503エラー対策・耐性強化版)
 // =====================
 
 import fs from "fs";
@@ -63,31 +63,46 @@ function commitAndPush(commitMessage) {
 }
 
 // =====================
-// HTML取得
+// HTML取得（503リトライ強化）
 // =====================
 
 async function fetchHTML(url) {
-    for (let i = 1; i <= 3; i++) {
+    const maxRetries = 5;
+    
+    for (let i = 1; i <= maxRetries; i++) {
         try {
             const controller = new AbortController();
-            const timer = setTimeout(() => { controller.abort(); }, 30000);
+            const timer = setTimeout(() => { controller.abort(); }, 20000);
             
             const response = await fetch(url, {
                 method: "GET",
                 headers: {
-                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-                    "Accept": "text/html,application/xhtml+xml",
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "ja-JP,ja;q=0.9",
-                    "Cache-Control": "no-cache"
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1"
                 },
                 signal: controller.signal
             });
             clearTimeout(timer);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             return await response.text();
         } catch (e) {
-            if (i === 3) throw e;
-            await sleep(i === 1 ? 3000 : 6000);
+            console.log(`取得試行 ${i}/${maxRetries} 失敗: ${e.message}`);
+            if (i === maxRetries) throw e;
+            
+            // 5秒〜12秒のランダムな待機時間を入れる（ブロック回避）
+            const waitMs = Math.floor(Math.random() * 7000) + 5000;
+            console.log(`${waitMs / 1000} 秒待機して再試行します...`);
+            await sleep(waitMs);
         }
     }
 }
@@ -101,7 +116,7 @@ const S = String.fromCharCode(42);
 function extractFullContent(html) {
     const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
     const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
-    const commentRegex = new RegExp("", "gi");
+    const commentRegex = new RegExp("<!--[\\s\\S]" + S + "?-->", "gi");
 
     let cleaned = html
         .replace(scriptRegex, "")
@@ -181,7 +196,7 @@ async function monitorOnce() {
         const html = await fetchHTML(TARGET_URL);
         currentLines = extractFullContent(html);
     } catch (e) {
-        console.error("データ取得失敗:", e.message);
+        console.error("データ取得最終失敗:", e.message);
         return;
     }
 
