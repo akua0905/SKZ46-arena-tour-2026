@@ -40,7 +40,15 @@ function commitAndPush(commitMessage) {
         const branch = process.env.GITHUB_REF_NAME || "main";
         execSync('git config user.name "github-actions[bot]"');
         execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
-        execSync(`git add --ignore-errors ${DATA_FILE} ${LAST_DIFF_FILE}`);
+        
+        let filesToAdd = [];
+        if (fs.existsSync(DATA_FILE)) filesToAdd.push(DATA_FILE);
+        if (fs.existsSync(LAST_DIFF_FILE)) filesToAdd.push(LAST_DIFF_FILE);
+        
+        if (filesToAdd.length > 0) {
+            execSync(`git add ${filesToAdd.join(" ")}`);
+        }
+
         try {
             execSync(`git commit -m "${commitMessage}"`);
             execSync(`git push origin HEAD:${branch}`);
@@ -58,7 +66,7 @@ function commitAndPush(commitMessage) {
 // =====================
 
 function buildChangeMessage(diff) {
-    return `【ローチケ詳細監視｜⚠️変更検知】
+    return `【ローチケ詳細監視｜変更検知】
 　${nowJP()}
 
 【更新内容】
