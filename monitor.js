@@ -9,7 +9,7 @@ import { execSync } from "child_process";
 // 設定
 // =====================
 
-const URL_LIST = "https://l-tike.com/order/?gLcode=94035";
+const URL_LIST = "https://l-tike.com/concert/mevent/?mid=366800";
 const URL_CHIBA = "https://l-tike.com/order/?gLcode=94035&gPfKey=20260410000002181264,20260410000002181263&gEntryMthd=02&gScheduleNo=9&gCarrierCd=01&gPfName=櫻坂４６&gBaseVenueCd=34275";
 
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
