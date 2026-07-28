@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (一覧監視・高精度版)
+// monitor.js (差分明確化版)
 // =====================
 
 import fs from "fs";
@@ -93,13 +93,12 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理（漏れなく全体を取得）
+// 解析処理（チケット情報に関連するテキスト行だけ抽出）
 // =====================
 
 const S = String.fromCharCode(42);
 
-function extractPageContent(html) {
-    // script/style/commentを削除
+function extractRelevantContent(html) {
     const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
     const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
     const commentRegex = new RegExp("<!--[\\s\\S]" + S + "?-->", "gi");
@@ -109,34 +108,43 @@ function extractPageContent(html) {
         .replace(styleRegex, "")
         .replace(commentRegex, "");
 
-    // メインのコンテンツ領域（なければbody）を抽出
     let mainMatch = cleaned.match(/<main[\\s\\S]*?<\/main>/i) || cleaned.match(/<body[\\s\\S]*?<\/body>/i);
     let targetHtml = mainMatch ? mainMatch[0] : cleaned;
 
-    // タグを除去して余白を整理
-    let text = targetHtml
+    // 行ごとに分割して重要なチケット関連キーワードが含まれる行のみ残す
+    let lines = targetHtml
         .replace(/<[^>]+>/g, "\n")
         .replace(/&nbsp;/g, " ")
         .replace(/&amp;/g, "&")
         .split("\n")
         .map(line => line.trim())
-        .filter(line => line.length > 0)
-        .join("\n");
+        .filter(line => line.length > 0);
 
-    return text;
+    // チケット情報と関係のないヘッダー・フッター・規定文などを除外
+    const filterKeywords = /(愛知|福岡|神奈川|大阪|徳島|千葉|埼玉|兵庫|広島|宮城|香川|発売|受付|予定枚数|販売|終了|完売|再開|受付前|一般発売|先行)/;
+    const ignoreKeywords = /(規定|ガイドライン|FAQ|特定商取引|プライバシー|お問い合わせ|会社概要|広告掲載)/;
+
+    let targetLines = lines.filter(line => filterKeywords.test(line) && !ignoreKeywords.test(line));
+
+    return targetLines;
 }
 
-// 送信用に都道府県・状態をわかりやすく整理（見易さ用）
-function formatForDiscord(rawText) {
-    const lines = rawText.split("\n");
-    const filtered = lines.filter(line => 
-        /(愛知|福岡|神奈川|大阪|徳島|千葉|埼玉|発売|受付|予定枚数|販売|終了|完売)/.test(line)
-    );
-    if (filtered.length === 0) {
-        // 条件に引っかからない場合は先頭数行を表示
-        return lines.slice(0, 15).join("\n");
+// 差分（どこがどう変わったか）を計算する関数
+function getDiffText(oldLines, newLines) {
+    let diffs = [];
+    let maxLen = Math.max(oldLines.length, newLines.length);
+
+    for (let i = 0; i < maxLen; i++) {
+        let oldLine = oldLines[i] || "（なし）";
+        let newLine = newLines[i] || "（なし）";
+
+        if (oldLine !== newLine) {
+            diffs.push(`【箇所 ${i + 1}】\n前: ${oldLine}\n後: ${newLine}`);
+        }
     }
-    return filtered.slice(0, 30).join("\n");
+
+    if (diffs.length === 0) return null;
+    return diffs.join("\n\n");
 }
 
 // =====================
@@ -169,38 +177,41 @@ async function monitorOnce() {
     
     pullLatest();
 
-    let fullText = "";
+    let currentLines = [];
     try {
         const html = await fetchHTML(TARGET_URL);
-        fullText = extractPageContent(html);
+        currentLines = extractRelevantContent(html);
     } catch (e) {
         console.error("データ取得失敗:", e.message);
         return;
     }
+
+    const currentText = currentLines.join("\n");
 
     let oldText = "";
     if (fs.existsSync(DATA_FILE)) {
         oldText = fs.readFileSync(DATA_FILE, "utf8");
     }
 
-    const summaryText = formatForDiscord(fullText);
-
     // 初回登録
     if (!oldText.trim()) {
-        fs.writeFileSync(DATA_FILE, fullText, "utf8");
+        fs.writeFileSync(DATA_FILE, currentText, "utf8");
         commitAndPush("Update initial ticket list data");
         
-        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【概要（一部抜粋）】\n${summaryText}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【監視対象（一部抜粋）】\n${currentLines.slice(0, 15).join("\n")}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         return;
     }
 
-    // 変更判定（ページ全体テキストの完全比較）
-    if (oldText !== fullText) {
-        fs.writeFileSync(DATA_FILE, fullText, "utf8");
+    // 差分確認
+    const oldLines = oldText.split("\n");
+    const diffMessage = getDiffText(oldLines, currentLines);
+
+    if (diffMessage) {
+        fs.writeFileSync(DATA_FILE, currentText, "utf8");
         commitAndPush(`Update ticket list status diff: ${nowJP()}`);
         
-        const msg = `【ローチケ一覧監視｜変更検知】\n${nowJP()}\n\n【最新状況（一部抜粋）】\n${summaryText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜変更検知】\n${nowJP()}\n\n【変更内容】\n${diffMessage}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         console.log("変更検知・通知完了");
     } else {
