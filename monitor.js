@@ -40,7 +40,7 @@ function commitAndPush(commitMessage) {
         const branch = process.env.GITHUB_REF_NAME || "main";
         execSync('git config user.name "github-actions[bot]"');
         execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
-        execSync(`git add --ignore-unmatch ${DATA_FILE} ${LAST_DIFF_FILE}`);
+        execSync(`git add --ignore-errors ${DATA_FILE} ${LAST_DIFF_FILE}`);
         try {
             execSync(`git commit -m "${commitMessage}"`);
             execSync(`git push origin HEAD:${branch}`);
