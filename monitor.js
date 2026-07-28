@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (差分明確化版)
+// monitor.js (完全全画面監視版)
 // =====================
 
 import fs from "fs";
@@ -93,15 +93,15 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理（チケット情報に関連するテキスト行だけ抽出）
+// 解析処理（本文全体の抽出）
 // =====================
 
 const S = String.fromCharCode(42);
 
-function extractRelevantContent(html) {
+function extractFullContent(html) {
     const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
     const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
-    const commentRegex = new RegExp("<!--[\\s\\S]" + S + "?-->", "gi");
+    const commentRegex = new RegExp("", "gi");
 
     let cleaned = html
         .replace(scriptRegex, "")
@@ -111,7 +111,7 @@ function extractRelevantContent(html) {
     let mainMatch = cleaned.match(/<main[\\s\\S]*?<\/main>/i) || cleaned.match(/<body[\\s\\S]*?<\/body>/i);
     let targetHtml = mainMatch ? mainMatch[0] : cleaned;
 
-    // 行ごとに分割して重要なチケット関連キーワードが含まれる行のみ残す
+    // タグを除去し、全テキスト行を抽出
     let lines = targetHtml
         .replace(/<[^>]+>/g, "\n")
         .replace(/&nbsp;/g, " ")
@@ -120,17 +120,11 @@ function extractRelevantContent(html) {
         .map(line => line.trim())
         .filter(line => line.length > 0);
 
-    // チケット情報と関係のないヘッダー・フッター・規定文などを除外
-    const filterKeywords = /(愛知|福岡|神奈川|大阪|徳島|千葉|埼玉|兵庫|広島|宮城|香川|発売|受付|予定枚数|販売|終了|完売|再開|受付前|一般発売|先行)/;
-    const ignoreKeywords = /(規定|ガイドライン|FAQ|特定商取引|プライバシー|お問い合わせ|会社概要|広告掲載)/;
-
-    let targetLines = lines.filter(line => filterKeywords.test(line) && !ignoreKeywords.test(line));
-
-    return targetLines;
+    return lines;
 }
 
-// 差分（どこがどう変わったか）を計算する関数
-function getDiffText(oldLines, newLines) {
+// 差分生成処理
+function getDiffSummary(oldLines, newLines) {
     let diffs = [];
     let maxLen = Math.max(oldLines.length, newLines.length);
 
@@ -139,11 +133,16 @@ function getDiffText(oldLines, newLines) {
         let newLine = newLines[i] || "（なし）";
 
         if (oldLine !== newLine) {
-            diffs.push(`【箇所 ${i + 1}】\n前: ${oldLine}\n後: ${newLine}`);
+            diffs.push(`前: ${oldLine}\n後: ${newLine}`);
         }
     }
 
     if (diffs.length === 0) return null;
+    
+    // 差分が多すぎる場合は先頭の一部のみ表示
+    if (diffs.length > 10) {
+        return diffs.slice(0, 10).join("\n\n") + `\n\n...他 ${diffs.length - 10} 箇所の変更あり`;
+    }
     return diffs.join("\n\n");
 }
 
@@ -180,7 +179,7 @@ async function monitorOnce() {
     let currentLines = [];
     try {
         const html = await fetchHTML(TARGET_URL);
-        currentLines = extractRelevantContent(html);
+        currentLines = extractFullContent(html);
     } catch (e) {
         console.error("データ取得失敗:", e.message);
         return;
@@ -198,14 +197,14 @@ async function monitorOnce() {
         fs.writeFileSync(DATA_FILE, currentText, "utf8");
         commitAndPush("Update initial ticket list data");
         
-        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【監視対象（一部抜粋）】\n${currentLines.slice(0, 15).join("\n")}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【ページ内容（一部抜粋）】\n${currentLines.slice(0, 10).join("\n")}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         return;
     }
 
     // 差分確認
     const oldLines = oldText.split("\n");
-    const diffMessage = getDiffText(oldLines, currentLines);
+    const diffMessage = getDiffSummary(oldLines, currentLines);
 
     if (diffMessage) {
         fs.writeFileSync(DATA_FILE, currentText, "utf8");
