@@ -1,52 +1,25 @@
-name: Lawson Ticket Monitor
+name: Ticket Monitor
 
 on:
   schedule:
-    - cron: "0 0,6,12,18 * * *"
+    # 日本時間 0:00, 6:00, 12:00, 18:00 に自動起動 (UTC 15:00, 21:00, 3:00, 9:00)
+    - cron: '0 15,21,3,9 * * *'
   workflow_dispatch:
-
-concurrency:
-  group: ticket-monitor
-  cancel-in-progress: false
-
-permissions:
-  contents: write
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
-          fetch-depth: 0
-
-      - name: Pull latest changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin ${{ github.ref_name }} --rebase || true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '20'
 
-      - name: Install packages
-        run: npm install
-
-      - name: Run monitor
+      - name: Run monitor scripts
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-        run: node monitor.js
-
-      - name: Save ticket data final
-        uses: EndBug/add-and-commit@v9
-        with:
-          message: "Update ticket monitor data (final)"
-          pull: "--rebase --autostash"
-          add: |
-            ticket_list.txt
-            last_diff.txt
+        run: node monitor.js & node monitor_detail.js
