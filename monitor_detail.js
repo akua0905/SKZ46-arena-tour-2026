@@ -12,8 +12,10 @@ import { execSync } from "child_process";
 const TARGET_URL = "https://l-tike.com/order/?gLcode=94035&gPfKey=20260410000002181264,20260410000002181263&gEntryMthd=02&gScheduleNo=9&gCarrierCd=01&gPfName=櫻坂４６&gBaseVenueCd=34275";
 const EVENT_NAME = "櫻坂46 ARENA TOUR 2026 (千葉公演詳細)";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
-const DATA_FILE = "ticket_detail_list.txt";
-const LAST_DIFF_FILE = "last_detail_diff.txt";
+
+// 千葉詳細専用のファイル名
+const DATA_FILE = "chiba_detail_list.txt";
+const LAST_DIFF_FILE = "chiba_detail_diff.txt";
 
 // =====================
 // 日本時間取得
@@ -38,7 +40,11 @@ function sleep(ms) {
 function pullLatest() {
     try {
         const branch = process.env.GITHUB_REF_NAME || "main";
-        execSync(`git pull origin ${branch}`);
+        execSync("git config user.name 'github-actions[bot]'");
+        execSync("git config user.email 'github-actions[bot]@users.noreply.github.com'");
+        execSync(`git fetch origin ${branch}`);
+        execSync(`git checkout ${branch}`);
+        execSync(`git pull origin ${branch} --rebase`);
         console.log("リポジトリ最新化完了");
     } catch (e) {
         console.log("Git Pullスキップまたは失敗:", e.message);
@@ -48,8 +54,6 @@ function pullLatest() {
 function commitAndPush(commitMessage) {
     try {
         const branch = process.env.GITHUB_REF_NAME || "main";
-        execSync('git config user.name "github-actions[bot]"');
-        execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
         
         let filesToAdd = [];
         if (fs.existsSync(DATA_FILE)) filesToAdd.push(DATA_FILE);
@@ -61,7 +65,7 @@ function commitAndPush(commitMessage) {
 
         try {
             execSync(`git commit -m "${commitMessage}"`);
-            execSync(`git push origin HEAD:${branch}`);
+            execSync(`git push origin ${branch}`);
             console.log("GitHubへ即時保存完了");
         } catch (e) {
             console.log("Gitコミット対象なし、または書き込み不要");
@@ -104,7 +108,7 @@ function buildInitialMessage() {
 ${nowJP()}
 
 【更新内容】
-初回詳細データを登録しました。
+千葉公演の初回詳細データを登録しました。
 
 【ローチケURL】
 ${TARGET_URL}
@@ -284,7 +288,6 @@ async function monitorOnce() {
     console.log("====================");
     console.log("実行時刻:", nowJP());
     
-    // 判定前に最新のGitHubデータを同期
     pullLatest();
 
     console.log("ローチケ詳細取得開始");
@@ -307,13 +310,12 @@ async function monitorOnce() {
         oldText = fs.readFileSync(DATA_FILE, "utf8");
     }
     
-    // 初回登録判定
-    if (!oldText) {
+    if (!oldText.trim()) {
         fs.writeFileSync(DATA_FILE, currentText, "utf8");
         if (fs.existsSync(LAST_DIFF_FILE)) {
             fs.unlinkSync(LAST_DIFF_FILE);
         }
-        commitAndPush("Update initial detail ticket data");
+        commitAndPush("Update initial chiba detail ticket data");
         const message = buildInitialMessage();
         await sendDiscord(message);
         return;
@@ -326,20 +328,19 @@ async function monitorOnce() {
         lastDiff = fs.readFileSync(LAST_DIFF_FILE, "utf8");
     }
     
-    // 変更あり
     if (diff && diff !== lastDiff) {
         fs.writeFileSync(DATA_FILE, currentText, "utf8");
         fs.writeFileSync(LAST_DIFF_FILE, diff, "utf8");
-        commitAndPush(`Update ticket detail status diff: ${nowJP()}`);
+        commitAndPush(`Update chiba ticket detail status diff: ${nowJP()}`);
         const message = buildChangeMessage(diff);
         await sendDiscord(message);
         console.log("変更通知送信＆即時Push完了");
     }
-    // 変更なし
     else {
+        fs.writeFileSync(DATA_FILE, currentText, "utf8");
         if (diff === "" && fs.existsSync(LAST_DIFF_FILE)) {
             fs.unlinkSync(LAST_DIFF_FILE);
-            commitAndPush("Reset last detail diff");
+            commitAndPush("Reset last chiba detail diff");
         }
         const message = buildNoChangeMessage();
         await sendDiscord(message);
@@ -376,7 +377,7 @@ async function mainLoop() {
     const endTime = startTime + END_TIME_MS;
     let isNoticeSent = false;
 
-    console.log("詳細監視開始:", nowJP());
+    console.log("千葉詳細監視開始:", nowJP());
 
     while (true) {
         const elapsedTime = Date.now() - startTime;
@@ -385,7 +386,7 @@ async function mainLoop() {
             isNoticeSent = true;
             const noticeMessage = buildNoticeMessage(
                 "まもなく再起動",
-                "詳細監視開始から5時間50分が経過しました。\n約8分後の5時間58分時点で一旦停止し、次のスケジュールで再起動します。"
+                "千葉詳細監視開始から5時間50分が経過しました。\n約8分後の5時間58分時点で一旦停止し、次のスケジュールで再起動します。"
             );
             await sendDiscord(noticeMessage);
         }
@@ -405,10 +406,10 @@ async function mainLoop() {
 
     const endMessage = buildNoticeMessage(
         "一旦停止",
-        "5時間58分の詳細監視期間が経過したため一旦停止します。\nデータの保存を行い、次の定刻に自動再起動します。"
+        "5時間58分の千葉詳細監視期間が経過したため一旦停止します。\nデータの保存を行い、次の定刻に自動再起動します。"
     );
     await sendDiscord(endMessage);
-    console.log("詳細監視終了");
+    console.log("千葉詳細監視終了");
 }
 
 // =====================
