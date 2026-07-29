@@ -127,7 +127,8 @@ arrow_forward_ios
 8.9
 日曜日
 広島県 広島グリーンアリーナ
-発売中
+warning
+予定枚数終了
 一般発売
 先着
 arrow_forward_ios
