@@ -1,4 +1,4 @@
-Name: Ticket Monitor
+name: Ticket Monitor
 
 on:
   schedule:
