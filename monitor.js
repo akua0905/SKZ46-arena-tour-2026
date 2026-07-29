@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (変更内容のみ・シンプル通知版)
+// monitor.js (フォーマット完全一致・ログ拡張版)
 // =====================
 
 import fs from "fs";
@@ -11,7 +11,7 @@ import { execSync } from "child_process";
 
 const TARGET_URL = "https://l-tike.com/concert/mevent/?mid=366800";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
-const DATA_FILE = "ticket_list_data.txt";
+const DATA_FILE = "ticket_list_data.json"; // 構造化データ保存用
 
 // =====================
 // 日本時間取得
@@ -103,12 +103,12 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理（受付ごとの独立管理＆改行フォーマット）
+// 解析処理（指定フォーマット抽出）
 // =====================
 
 const S = String.fromCharCode(42);
 
-function extractPrefAndStatus(html) {
+function extractTicketItems(html) {
     const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
     const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
     const commentRegex = new RegExp("<!--[\\s\\S]" + S + "?-->", "gi");
@@ -132,68 +132,83 @@ function extractPrefAndStatus(html) {
     const prefs = ["北海道", "宮城県", "愛知県", "福岡県", "神奈川県", "大阪府", "徳島県", "千葉県", "埼玉県", "兵庫県", "広島県", "香川県", "石川県", "新潟県", "愛媛県"];
     const statuses = ["予定枚数終了", "発売中", "受付中", "販売中", "受付終了", "発売前", "受付前", "販売再開"];
 
-    let items = [];
-    let currentPref = "";
+    // ブロック単位への分割（日付または都道府県が登場した箇所）
+    const dateRegex = /^\d{1,2}\.\d{1,2}$/;
+    
+    let blocks = [];
+    let currentBlock = [];
 
     for (let line of rawLines) {
-        let foundPref = prefs.find(p => line.includes(p));
-        if (foundPref) {
-            currentPref = foundPref;
-        }
+        let isPref = prefs.some(p => line.includes(p));
+        let isDate = dateRegex.test(line);
 
-        if (currentPref) {
-            let foundStatus = statuses.find(s => line === s);
-            if (foundStatus) {
-                items.push({ pref: currentPref, status: foundStatus });
+        if ((isPref || isDate) && currentBlock.length > 0) {
+            let str = currentBlock.join(" ");
+            if (statuses.some(s => str.includes(s))) {
+                blocks.push(currentBlock);
             }
+            currentBlock = [];
+        }
+        currentBlock.push(line);
+    }
+    if (currentBlock.length > 0) {
+        let str = currentBlock.join(" ");
+        if (statuses.some(s => str.includes(s))) {
+            blocks.push(currentBlock);
         }
     }
 
+    // ブロックから「都道府県」「日付構造」「ステータス」を解析
+    let items = [];
     let prefCounts = {};
-    let resultLines = [];
 
-    for (let item of items) {
-        prefCounts[item.pref] = (prefCounts[item.pref] || 0) + 1;
-        let label = `${item.pref} (受付${prefCounts[item.pref]})`;
-        
-        resultLines.push(`${label}\nステータス: ${item.status}`);
+    for (let block of blocks) {
+        let pref = "";
+        let dates = [];
+        let status = "";
+        let isReopen = false;
+
+        for (let line of block) {
+            let foundPref = prefs.find(p => line.includes(p));
+            if (foundPref) pref = foundPref;
+
+            if (dateRegex.test(line)) {
+                dates.push(line);
+            }
+            
+            // 曜日などの補足要素を拾う
+            if (["土曜日", "日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "・"].includes(line)) {
+                dates.push(line);
+            }
+
+            let foundStatus = statuses.find(s => line === s);
+            if (foundStatus) status = foundStatus;
+
+            if (line.includes("販売再開")) isReopen = true;
+        }
+
+        if (pref && status) {
+            prefCounts[pref] = (prefCounts[pref] || 0) + 1;
+            let index = prefCounts[pref];
+            
+            // 日付表示の整形
+            let dateStr = dates.join(" ").replace(/\s+・\s+/g, " ・ ").trim();
+            if (!dateStr) dateStr = "全日程";
+
+            // 一意のキーを作成
+            let id = `${pref}_${index}${isReopen ? "_reopen" : ""}`;
+
+            items.push({
+                id: id,
+                pref: pref,
+                dateStr: dateStr,
+                status: status,
+                isReopen: isReopen
+            });
+        }
     }
 
-    return resultLines;
-}
-
-// 差分チェック処理
-function getDiffSummary(oldLines, newLines) {
-    let parseMap = (lines) => {
-        let map = new Map();
-        let text = lines.join("\n");
-        let blocks = text.split("\n\n");
-
-        for (let block of blocks) {
-            let linesInBlock = block.split("\n");
-            if (linesInBlock.length >= 2) {
-                let key = linesInBlock[0].trim();
-                let val = linesInBlock[1].replace("ステータス: ", "").trim();
-                map.set(key, val);
-            }
-        }
-        return map;
-    };
-
-    let oldMap = parseMap(oldLines);
-    let newMap = parseMap(newLines);
-
-    let diffs = [];
-
-    newMap.forEach((status, label) => {
-        let oldStatus = oldMap.get(label) || "（なし）";
-        if (oldStatus !== status) {
-            diffs.push(`【${label}】\n前:\n${oldStatus}\n\n後:\n${status}`);
-        }
-    });
-
-    if (diffs.length === 0) return null;
-    return diffs.join("\n\n");
+    return items;
 }
 
 // =====================
@@ -226,47 +241,66 @@ async function monitorOnce() {
     
     pullLatest();
 
-    let currentLines = [];
+    let currentItems = [];
     try {
         const html = await fetchHTML(TARGET_URL);
-        currentLines = extractPrefAndStatus(html);
+        currentItems = extractTicketItems(html);
     } catch (e) {
         console.error("データ取得最終失敗:", e.message);
         return;
     }
 
-    const currentText = currentLines.join("\n\n");
+    // GitHubのアクション実行ログに全監視対象を出力
+    console.log("\n--- 【GitHub実行ログ：現在の全監視受付一覧】 ---");
+    currentItems.forEach(item => {
+        console.log(`[${item.pref}] ${item.dateStr} | ステータス: ${item.status}${item.isReopen ? ' (販売再開枠)' : ''}`);
+    });
+    console.log("-----------------------------------------------\n");
 
-    let oldText = "";
+    let oldItems = [];
     if (fs.existsSync(DATA_FILE)) {
-        oldText = fs.readFileSync(DATA_FILE, "utf8");
+        try {
+            oldItems = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+        } catch (e) {
+            oldItems = [];
+        }
     }
 
     // 初回登録
-    if (!oldText.trim()) {
-        fs.writeFileSync(DATA_FILE, currentText, "utf8");
-        commitAndPush("Update initial ticket list data");
+    if (oldItems.length === 0) {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(currentItems, null, 2), "utf8");
+        commitAndPush("Update initial ticket list json");
         
-        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ監視｜初回登録】\n　${nowJP()}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         return;
     }
 
-    // 差分確認
-    const oldLines = oldText.split("\n");
-    const diffMessage = getDiffSummary(oldLines, currentLines);
+    // 差分チェック
+    let oldMap = new Map(oldItems.map(item => [item.id, item]));
+    let diffBlocks = [];
 
-    if (diffMessage) {
-        fs.writeFileSync(DATA_FILE, currentText, "utf8");
+    for (let current of currentItems) {
+        let old = oldMap.get(current.id);
+        if (old) {
+            if (old.status !== current.status) {
+                diffBlocks.push(`☆${current.pref}☆\n${current.dateStr}\n\n${old.status}\n↓\n${current.status}`);
+            }
+        }
+    }
+
+    if (diffBlocks.length > 0) {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(currentItems, null, 2), "utf8");
         commitAndPush(`Update ticket list status diff: ${nowJP()}`);
         
-        const msg = `【ローチケ一覧監視｜変更検知】\n${nowJP()}\n\n【変更内容】\n${diffMessage}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const diffText = diffBlocks.join("\n\n");
+        const msg = `【ローチケ監視｜変更検知】\n　${nowJP()}\n\n【更新内容】\n${diffText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
-        console.log("変更検知・通知完了");
+        console.log("変更検知・Discord通知完了");
     } else {
-        const msg = `【ローチケ一覧監視｜変更なし】\n${nowJP()}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ監視｜変更なし】\n${nowJP()}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
-        console.log("変更なし通知完了");
+        console.log("変更なし・Discord通知完了");
     }
 }
 
@@ -313,7 +347,7 @@ async function mainLoop() {
     }
 
     console.log("監視終了");
-    const endMsg = `【ローチケ一覧監視｜監視終了】\n${nowJP()}\n\n規定の監視時間（約6時間）が経過したため、監視を終了しました。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+    const endMsg = `【ローチケ監視｜監視終了】\n${nowJP()}\n\n規定の監視時間（約6時間）が経過したため、監視を終了しました。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
     await sendDiscord(endMsg);
 }
 
