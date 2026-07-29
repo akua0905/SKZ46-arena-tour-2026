@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (フォーマット完全一致・ログ拡張版)
+// monitor.js (実行ログ表記・都道府県内ナンバリング対応版)
 // =====================
 
 import fs from "fs";
@@ -11,7 +11,10 @@ import { execSync } from "child_process";
 
 const TARGET_URL = "https://l-tike.com/concert/mevent/?mid=366800";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
-const DATA_FILE = "ticket_list_data.json"; // 構造化データ保存用
+const DATA_FILE = "ticket_list_data.json";
+
+// 丸数字の変換用配列（1〜20まで対応）
+const CIRCLED_NUMBERS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑯"];
 
 // =====================
 // 日本時間取得
@@ -103,7 +106,7 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理（指定フォーマット抽出）
+// 解析処理
 // =====================
 
 const S = String.fromCharCode(42);
@@ -132,7 +135,6 @@ function extractTicketItems(html) {
     const prefs = ["北海道", "宮城県", "愛知県", "福岡県", "神奈川県", "大阪府", "徳島県", "千葉県", "埼玉県", "兵庫県", "広島県", "香川県", "石川県", "新潟県", "愛媛県"];
     const statuses = ["予定枚数終了", "発売中", "受付中", "販売中", "受付終了", "発売前", "受付前", "販売再開"];
 
-    // ブロック単位への分割（日付または都道府県が登場した箇所）
     const dateRegex = /^\d{1,2}\.\d{1,2}$/;
     
     let blocks = [];
@@ -158,7 +160,6 @@ function extractTicketItems(html) {
         }
     }
 
-    // ブロックから「都道府県」「日付構造」「ステータス」を解析
     let items = [];
     let prefCounts = {};
 
@@ -176,7 +177,6 @@ function extractTicketItems(html) {
                 dates.push(line);
             }
             
-            // 曜日などの補足要素を拾う
             if (["土曜日", "日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "・"].includes(line)) {
                 dates.push(line);
             }
@@ -191,16 +191,15 @@ function extractTicketItems(html) {
             prefCounts[pref] = (prefCounts[pref] || 0) + 1;
             let index = prefCounts[pref];
             
-            // 日付表示の整形
             let dateStr = dates.join(" ").replace(/\s+・\s+/g, " ・ ").trim();
             if (!dateStr) dateStr = "全日程";
 
-            // 一意のキーを作成
             let id = `${pref}_${index}${isReopen ? "_reopen" : ""}`;
 
             items.push({
                 id: id,
                 pref: pref,
+                prefIndex: index, // 都道府県内でのインデックス（1, 2, ...）
                 dateStr: dateStr,
                 status: status,
                 isReopen: isReopen
@@ -250,12 +249,13 @@ async function monitorOnce() {
         return;
     }
 
-    // GitHubのアクション実行ログに全監視対象を出力
-    console.log("\n--- 【GitHub実行ログ：現在の全監視受付一覧】 ---");
+    // GitHubのアクション実行ログ出力（ナンバリング形式）
+    console.log("--- 【GitHub実行ログ：現在の全監視受付一覧】 ---");
     currentItems.forEach(item => {
-        console.log(`[${item.pref}] ${item.dateStr} | ステータス: ${item.status}${item.isReopen ? ' (販売再開枠)' : ''}`);
+        let numSymbol = CIRCLED_NUMBERS[item.prefIndex - 1] || `(${item.prefIndex})`;
+        console.log(`[${item.pref}] ${numSymbol}| ステータス: ${item.status}`);
     });
-    console.log("-----------------------------------------------\n");
+    console.log("-----------------------------------------------");
 
     let oldItems = [];
     if (fs.existsSync(DATA_FILE)) {
