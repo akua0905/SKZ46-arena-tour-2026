@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (ローチケ最新構造完全対応版)
+// monitor.js (変更内容のみ・シンプル通知版)
 // =====================
 
 import fs from "fs";
@@ -103,12 +103,12 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理（ローチケ専用ブロック整形抽出）
+// 解析処理（受付ごとの独立管理＆改行フォーマット）
 // =====================
 
 const S = String.fromCharCode(42);
 
-function extractTicketBlocks(html) {
+function extractPrefAndStatus(html) {
     const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
     const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
     const commentRegex = new RegExp("<!--[\\s\\S]" + S + "?-->", "gi");
@@ -121,7 +121,6 @@ function extractTicketBlocks(html) {
     let mainMatch = cleaned.match(/<main[\\s\\S]*?<\/main>/i) || cleaned.match(/<body[\\s\\S]*?<\/body>/i);
     let targetHtml = mainMatch ? mainMatch[0] : cleaned;
 
-    // タグを除去して行ごとに整形
     let rawLines = targetHtml
         .replace(/<[^>]+>/g, "\n")
         .replace(/&nbsp;/g, " ")
@@ -130,94 +129,70 @@ function extractTicketBlocks(html) {
         .map(line => line.trim())
         .filter(line => line.length > 0);
 
-    // 不要な要素を除外
-    const ignorePatterns = /^(warning|arrow_forward_ios|keyboard_arrow_right|check|info|・|選択する|詳細|お申し込み|お申込はこちら|チケット|購入|カート|マイページ|ログイン|新規会員登録|申し込み履歴|閲覧履歴|お気に入り関連|メルマガ・お気に入り登録変更|ご利用ガイド|櫻坂４６|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)$/i;
+    const prefs = ["北海道", "宮城県", "愛知県", "福岡県", "神奈川県", "大阪府", "徳島県", "千葉県", "埼玉県", "兵庫県", "広島県", "香川県", "石川県", "新潟県", "愛媛県"];
+    const statuses = ["予定枚数終了", "発売中", "受付中", "販売中", "受付終了", "発売前", "受付前", "販売再開"];
 
-    let cleanLines = rawLines.filter(line => !ignorePatterns.test(line));
+    let items = [];
+    let currentPref = "";
 
-    // ブロック分解ロジック
-    // 日付パターン（例: 7.29, 8.8, 8.15 など）をブロックの先頭として識別
-    const dateRegex = /^\d{1,2}\.\d{1,2}$/;
+    for (let line of rawLines) {
+        let foundPref = prefs.find(p => line.includes(p));
+        if (foundPref) {
+            currentPref = foundPref;
+        }
 
-    let blocks = [];
-    let currentBlock = [];
-
-    for (let line of cleanLines) {
-        if (dateRegex.test(line) && currentBlock.length > 0) {
-            // 受付形式やステータスが含まれるブロックのみ採用
-            let blockStr = currentBlock.join(" ");
-            if (/(予定枚数終了|発売中|受付中|販売中|受付終了|発売前|受付前|販売再開)/.test(blockStr)) {
-                blocks.push(formatBlockText(currentBlock));
+        if (currentPref) {
+            let foundStatus = statuses.find(s => line === s);
+            if (foundStatus) {
+                items.push({ pref: currentPref, status: foundStatus });
             }
-            currentBlock = [];
-        }
-        currentBlock.push(line);
-    }
-
-    if (currentBlock.length > 0) {
-        let blockStr = currentBlock.join(" ");
-        if (/(予定枚数終了|発売中|受付中|販売中|受付終了|発売前|受付前|販売再開)/.test(blockStr)) {
-            blocks.push(formatBlockText(currentBlock));
         }
     }
 
-    return [...new Set(blocks)];
+    let prefCounts = {};
+    let resultLines = [];
+
+    for (let item of items) {
+        prefCounts[item.pref] = (prefCounts[item.pref] || 0) + 1;
+        let label = `${item.pref} (受付${prefCounts[item.pref]})`;
+        
+        resultLines.push(`${label}\nステータス: ${item.status}`);
+    }
+
+    return resultLines;
 }
 
-// ブロック内のテキストを見やすく1行に成形する関数
-function formatBlockText(lines) {
-    let dates = [];
-    let note = "";
-    let location = "";
-    let status = "";
-    let type = "";
-
-    const dateRegex = /^\d{1,2}\.\d{1,2}$/;
-    const prefPattern = /(北海道|宮城県|愛知県|福岡県|神奈川県|大阪府|徳島県|千葉県|埼玉県|兵庫県|広島県|香川県|石川県|新潟県|愛媛県)/;
-    const statusPattern = /(予定枚数終了|発売中|受付中|販売中|受付終了|発売前|受付前|販売再開)/;
-
-    for (let line of lines) {
-        if (dateRegex.test(line)) {
-            dates.push(line);
-        } else if (line.startsWith("こちらは") && line.includes("販売再開")) {
-            note = `[${line}]`;
-        } else if (prefPattern.test(line)) {
-            location = line;
-        } else if (statusPattern.test(line)) {
-            status = line;
-        } else if (line.includes("一般発売") || line.includes("先行") || line.includes("先着") || line.includes("抽選")) {
-            type = line;
-        }
-    }
-
-    let dateStr = dates.join("・");
-    return `${dateStr} ${location} ${note} | ${type} | ${status}`.replace(/\s+/g, " ").trim();
-}
-
-// 差分確認処理
+// 差分チェック処理
 function getDiffSummary(oldLines, newLines) {
+    let parseMap = (lines) => {
+        let map = new Map();
+        let text = lines.join("\n");
+        let blocks = text.split("\n\n");
+
+        for (let block of blocks) {
+            let linesInBlock = block.split("\n");
+            if (linesInBlock.length >= 2) {
+                let key = linesInBlock[0].trim();
+                let val = linesInBlock[1].replace("ステータス: ", "").trim();
+                map.set(key, val);
+            }
+        }
+        return map;
+    };
+
+    let oldMap = parseMap(oldLines);
+    let newMap = parseMap(newLines);
+
     let diffs = [];
 
-    for (let i = 0; i < Math.max(oldLines.length, newLines.length); i++) {
-        let oldItem = oldLines[i];
-        let newItem = newLines[i];
-
-        if (oldItem !== newItem) {
-            if (oldItem && newItem) {
-                diffs.push(`前: ${oldItem}\n後: ${newItem}`);
-            } else if (!oldItem && newItem) {
-                diffs.push(`追加: ${newItem}`);
-            } else if (oldItem && !newItem) {
-                diffs.push(`削除: ${oldItem}`);
-            }
+    newMap.forEach((status, label) => {
+        let oldStatus = oldMap.get(label) || "（なし）";
+        if (oldStatus !== status) {
+            diffs.push(`【${label}】\n前:\n${oldStatus}\n\n後:\n${status}`);
         }
-    }
+    });
 
     if (diffs.length === 0) return null;
-
-    if (diffs.length > 10) {
-        return diffs.slice(0, 10).join("\n\n") + `\n\n...他 ${diffs.length - 10} 箇所の変更あり`;
-    }
     return diffs.join("\n\n");
 }
 
@@ -254,13 +229,13 @@ async function monitorOnce() {
     let currentLines = [];
     try {
         const html = await fetchHTML(TARGET_URL);
-        currentLines = extractTicketBlocks(html);
+        currentLines = extractPrefAndStatus(html);
     } catch (e) {
         console.error("データ取得最終失敗:", e.message);
         return;
     }
 
-    const currentText = currentLines.join("\n");
+    const currentText = currentLines.join("\n\n");
 
     let oldText = "";
     if (fs.existsSync(DATA_FILE)) {
@@ -272,7 +247,7 @@ async function monitorOnce() {
         fs.writeFileSync(DATA_FILE, currentText, "utf8");
         commitAndPush("Update initial ticket list data");
         
-        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【最新状況一覧】\n${currentLines.join("\n")}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         return;
     }
