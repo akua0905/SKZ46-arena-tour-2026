@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (実行ログ表記・都道府県内ナンバリング対応版)
+// monitor.js (動的タイトル・削除通知・終了時間繰り上げ版)
 // =====================
 
 import fs from "fs";
@@ -13,7 +13,7 @@ const TARGET_URL = "https://l-tike.com/concert/mevent/?mid=366800";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const DATA_FILE = "ticket_list_data.json";
 
-// 丸数字の変換用配列（1〜20まで対応）
+// 丸数字の変換用配列
 const CIRCLED_NUMBERS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑯"];
 
 // =====================
@@ -199,7 +199,7 @@ function extractTicketItems(html) {
             items.push({
                 id: id,
                 pref: pref,
-                prefIndex: index, // 都道府県内でのインデックス（1, 2, ...）
+                prefIndex: index,
                 dateStr: dateStr,
                 status: status,
                 isReopen: isReopen
@@ -249,7 +249,7 @@ async function monitorOnce() {
         return;
     }
 
-    // GitHubのアクション実行ログ出力（ナンバリング形式）
+    // GitHubのアクション実行ログ出力
     console.log("--- 【GitHub実行ログ：現在の全監視受付一覧】 ---");
     currentItems.forEach(item => {
         let numSymbol = CIRCLED_NUMBERS[item.prefIndex - 1] || `(${item.prefIndex})`;
@@ -276,27 +276,58 @@ async function monitorOnce() {
         return;
     }
 
-    // 差分チェック
+    // 差分チェック（ステータス変更 & 削除された受付）
     let oldMap = new Map(oldItems.map(item => [item.id, item]));
-    let diffBlocks = [];
+    let currentMap = new Map(currentItems.map(item => [item.id, item]));
 
+    let diffBlocks = [];
+    let changedPrefs = new Set();
+
+    // 1. ステータス変更チェック
     for (let current of currentItems) {
         let old = oldMap.get(current.id);
         if (old) {
             if (old.status !== current.status) {
                 diffBlocks.push(`☆${current.pref}☆\n${current.dateStr}\n\n${old.status}\n↓\n${current.status}`);
+                changedPrefs.add(current.pref.replace("県", "").replace("府", "").replace("都", "").replace("道", ""));
             }
         }
     }
 
-    if (diffBlocks.length > 0) {
+    // 2. 削除された受付のチェック
+    let deletedBlocks = [];
+    let deletedPrefs = new Set();
+
+    for (let old of oldItems) {
+        if (!currentMap.has(old.id)) {
+            deletedBlocks.push(`☆${old.pref}☆\n${old.dateStr}\n\nステータス: ${old.status}（受付枠削除）`);
+            deletedPrefs.add(old.pref.replace("県", "").replace("府", "").replace("都", "").replace("道", ""));
+        }
+    }
+
+    let hasUpdate = diffBlocks.length > 0 || deletedBlocks.length > 0;
+
+    if (hasUpdate) {
         fs.writeFileSync(DATA_FILE, JSON.stringify(currentItems, null, 2), "utf8");
         commitAndPush(`Update ticket list status diff: ${nowJP()}`);
-        
-        const diffText = diffBlocks.join("\n\n");
-        const msg = `【ローチケ監視｜変更検知】\n　${nowJP()}\n\n【更新内容】\n${diffText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
-        await sendDiscord(msg);
-        console.log("変更検知・Discord通知完了");
+
+        // 1. 変更検知通知
+        if (diffBlocks.length > 0) {
+            let prefTitleStr = Array.from(changedPrefs).join("/");
+            let diffText = diffBlocks.join("\n\n");
+            let msg = `【ローチケ監視｜変更検知<${prefTitleStr}>】\n　${nowJP()}\n\n【更新内容】\n${diffText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+            await sendDiscord(msg);
+        }
+
+        // 2. 削除枠通知
+        if (deletedBlocks.length > 0) {
+            let delPrefTitleStr = Array.from(deletedPrefs).join("/");
+            let delText = deletedBlocks.join("\n\n");
+            let msg = `【ローチケ監視｜受付削除<${delPrefTitleStr}>】\n　${nowJP()}\n\n【削除された受付】\n${delText}\n\n【ローチケURL】\n${TARGET_URL}\n\n@everyone\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+            await sendDiscord(msg);
+        }
+
+        console.log("変更/削除検知・Discord通知完了");
     } else {
         const msg = `【ローチケ監視｜変更なし】\n${nowJP()}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
@@ -322,11 +353,11 @@ function getNextCheckTime() {
 }
 
 // =====================
-// メインループ
+// メインループ（25分短縮：5時間33分で終了）
 // =====================
 
 async function mainLoop() {
-    const END_TIME_MS = 21480000; // 5時間58分
+    const END_TIME_MS = 19980000; // 5時間33分 (21,480,000ms - 1,500,000ms)
     const startTime = Date.now();
     const endTime = startTime + END_TIME_MS;
 
@@ -347,7 +378,7 @@ async function mainLoop() {
     }
 
     console.log("監視終了");
-    const endMsg = `【ローチケ監視｜監視終了】\n${nowJP()}\n\n規定の監視時間（約6時間）が経過したため、監視を終了しました。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+    const endMsg = `【ローチケ監視｜監視終了】\n${nowJP()}\n\n規定の監視時間が経過したため、監視を終了しました。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
     await sendDiscord(endMsg);
 }
 
