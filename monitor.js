@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (メンテナンス後対応・行ズレ防止版)
+// monitor.js (ローチケ最新構造完全対応版)
 // =====================
 
 import fs from "fs";
@@ -63,7 +63,7 @@ function commitAndPush(commitMessage) {
 }
 
 // =====================
-// HTML取得（耐性強化）
+// HTML取得
 // =====================
 
 async function fetchHTML(url) {
@@ -103,12 +103,12 @@ async function fetchHTML(url) {
 }
 
 // =====================
-// 解析処理（ノイズ除去＆重要情報の抽出）
+// 解析処理（ローチケ専用ブロック整形抽出）
 // =====================
 
 const S = String.fromCharCode(42);
 
-function extractCleanedLines(html) {
+function extractTicketBlocks(html) {
     const scriptRegex = new RegExp("<script[\\s\\S]" + S + "?</script>", "gi");
     const styleRegex = new RegExp("<style[\\s\\S]" + S + "?</style>", "gi");
     const commentRegex = new RegExp("<!--[\\s\\S]" + S + "?-->", "gi");
@@ -121,7 +121,7 @@ function extractCleanedLines(html) {
     let mainMatch = cleaned.match(/<main[\\s\\S]*?<\/main>/i) || cleaned.match(/<body[\\s\\S]*?<\/body>/i);
     let targetHtml = mainMatch ? mainMatch[0] : cleaned;
 
-    // タグ除去後のテキスト行を取得
+    // タグを除去して行ごとに整形
     let rawLines = targetHtml
         .replace(/<[^>]+>/g, "\n")
         .replace(/&nbsp;/g, " ")
@@ -130,39 +130,91 @@ function extractCleanedLines(html) {
         .map(line => line.trim())
         .filter(line => line.length > 0);
 
-    // 不要なアイコン用テキストや記号を除外するフィルター
-    const noisePatterns = /^(warning|arrow_forward_ios|keyboard_arrow_right|check|info|・|選択する|詳細|お申し込み|お申込はこちら|チケット|購入|カート)$/i;
+    // 不要な要素を除外
+    const ignorePatterns = /^(warning|arrow_forward_ios|keyboard_arrow_right|check|info|・|選択する|詳細|お申し込み|お申込はこちら|チケット|購入|カート|マイページ|ログイン|新規会員登録|申し込み履歴|閲覧履歴|お気に入り関連|メルマガ・お気に入り登録変更|ご利用ガイド|櫻坂４６|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)$/i;
 
-    // 重要キーワード（都道府県、ステータス、受付方法など）が含まれる行だけを抽出
-    const importantPatterns = /(愛知|福岡|神奈川|大阪|徳島|千葉|埼玉|兵庫|広島|宮城|香川|北海道|愛媛|石川|新潟|発売中|予定枚数終了|受付前|受付終了|販売再開|一般発売|先行|先着|抽選)/;
+    let cleanLines = rawLines.filter(line => !ignorePatterns.test(line));
 
-    let cleanLines = [];
-    for (let line of rawLines) {
-        if (noisePatterns.test(line)) continue;
-        if (importantPatterns.test(line)) {
-            cleanLines.push(line);
+    // ブロック分解ロジック
+    // 日付パターン（例: 7.29, 8.8, 8.15 など）をブロックの先頭として識別
+    const dateRegex = /^\d{1,2}\.\d{1,2}$/;
+
+    let blocks = [];
+    let currentBlock = [];
+
+    for (let line of cleanLines) {
+        if (dateRegex.test(line) && currentBlock.length > 0) {
+            // 受付形式やステータスが含まれるブロックのみ採用
+            let blockStr = currentBlock.join(" ");
+            if (/(予定枚数終了|発売中|受付中|販売中|受付終了|発売前|受付前|販売再開)/.test(blockStr)) {
+                blocks.push(formatBlockText(currentBlock));
+            }
+            currentBlock = [];
+        }
+        currentBlock.push(line);
+    }
+
+    if (currentBlock.length > 0) {
+        let blockStr = currentBlock.join(" ");
+        if (/(予定枚数終了|発売中|受付中|販売中|受付終了|発売前|受付前|販売再開)/.test(blockStr)) {
+            blocks.push(formatBlockText(currentBlock));
         }
     }
 
-    return cleanLines;
+    return [...new Set(blocks)];
 }
 
-// 差分チェック処理（変更箇所の明確化）
+// ブロック内のテキストを見やすく1行に成形する関数
+function formatBlockText(lines) {
+    let dates = [];
+    let note = "";
+    let location = "";
+    let status = "";
+    let type = "";
+
+    const dateRegex = /^\d{1,2}\.\d{1,2}$/;
+    const prefPattern = /(北海道|宮城県|愛知県|福岡県|神奈川県|大阪府|徳島県|千葉県|埼玉県|兵庫県|広島県|香川県|石川県|新潟県|愛媛県)/;
+    const statusPattern = /(予定枚数終了|発売中|受付中|販売中|受付終了|発売前|受付前|販売再開)/;
+
+    for (let line of lines) {
+        if (dateRegex.test(line)) {
+            dates.push(line);
+        } else if (line.startsWith("こちらは") && line.includes("販売再開")) {
+            note = `[${line}]`;
+        } else if (prefPattern.test(line)) {
+            location = line;
+        } else if (statusPattern.test(line)) {
+            status = line;
+        } else if (line.includes("一般発売") || line.includes("先行") || line.includes("先着") || line.includes("抽選")) {
+            type = line;
+        }
+    }
+
+    let dateStr = dates.join("・");
+    return `${dateStr} ${location} ${note} | ${type} | ${status}`.replace(/\s+/g, " ").trim();
+}
+
+// 差分確認処理
 function getDiffSummary(oldLines, newLines) {
     let diffs = [];
-    let maxLen = Math.max(oldLines.length, newLines.length);
 
-    for (let i = 0; i < maxLen; i++) {
-        let oldLine = oldLines[i] || "（なし）";
-        let newLine = newLines[i] || "（なし）";
+    for (let i = 0; i < Math.max(oldLines.length, newLines.length); i++) {
+        let oldItem = oldLines[i];
+        let newItem = newLines[i];
 
-        if (oldLine !== newLine) {
-            diffs.push(`前: ${oldLine}\n後: ${newLine}`);
+        if (oldItem !== newItem) {
+            if (oldItem && newItem) {
+                diffs.push(`前: ${oldItem}\n後: ${newItem}`);
+            } else if (!oldItem && newItem) {
+                diffs.push(`追加: ${newItem}`);
+            } else if (oldItem && !newItem) {
+                diffs.push(`削除: ${oldItem}`);
+            }
         }
     }
 
     if (diffs.length === 0) return null;
-    
+
     if (diffs.length > 10) {
         return diffs.slice(0, 10).join("\n\n") + `\n\n...他 ${diffs.length - 10} 箇所の変更あり`;
     }
@@ -202,7 +254,7 @@ async function monitorOnce() {
     let currentLines = [];
     try {
         const html = await fetchHTML(TARGET_URL);
-        currentLines = extractCleanedLines(html);
+        currentLines = extractTicketBlocks(html);
     } catch (e) {
         console.error("データ取得最終失敗:", e.message);
         return;
@@ -220,7 +272,7 @@ async function monitorOnce() {
         fs.writeFileSync(DATA_FILE, currentText, "utf8");
         commitAndPush("Update initial ticket list data");
         
-        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【監視対象（抽出データ抜粋）】\n${currentLines.slice(0, 12).join("\n")}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+        const msg = `【ローチケ一覧監視｜初回登録】\n${nowJP()}\n\n【最新状況一覧】\n${currentLines.join("\n")}\n\n【ローチケURL】\n${TARGET_URL}\n\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
         await sendDiscord(msg);
         return;
     }
@@ -284,7 +336,10 @@ async function mainLoop() {
         console.log(`次回確認: ${next.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`);
         if (wait > 0) await sleep(wait);
     }
+
     console.log("監視終了");
+    const endMsg = `【ローチケ一覧監視｜監視終了】\n${nowJP()}\n\n規定の監視時間（約6時間）が経過したため、監視を終了しました。\n〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜`;
+    await sendDiscord(endMsg);
 }
 
 mainLoop();
