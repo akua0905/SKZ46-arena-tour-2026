@@ -127,8 +127,7 @@ arrow_forward_ios
 8.9
 日曜日
 広島県 広島グリーンアリーナ
-warning
-予定枚数終了
+発売中
 一般発売
 先着
 arrow_forward_ios
@@ -198,7 +197,8 @@ arrow_forward_ios
 8.30
 日曜日
 香川県 あなぶきアリーナ香川
-発売中
+warning
+予定枚数終了
 一般発売
 先着
 arrow_forward_ios
