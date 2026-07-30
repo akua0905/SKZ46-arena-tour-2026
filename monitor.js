@@ -353,11 +353,11 @@ function getNextCheckTime() {
 }
 
 // =====================
-// メインループ（25分短縮：5時間33分で終了）
+// メインループ（5時間50分運用：GitHub上限回避・隙間ゼロ対応）
 // =====================
 
 async function mainLoop() {
-    const END_TIME_MS = 19980000; // 5時間33分 (21,480,000ms - 1,500,000ms)
+    const END_TIME_MS = 21000000; // 5時間50分 (6時間上限を回避しつつ、次の起動まで粘る)
     const startTime = Date.now();
     const endTime = startTime + END_TIME_MS;
 
