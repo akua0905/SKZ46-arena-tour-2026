@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (ローマ数字ナンバリング & 通知表記対応版)
+// monitor.js (全角数字ナンバリング対応版)
 // =====================
 
 import fs from "fs";
@@ -13,8 +13,8 @@ const TARGET_URL = "https://l-tike.com/concert/mevent/?mid=366800";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const DATA_FILE = "ticket_list_data.json";
 
-// ローマ数字の変換用配列
-const ROMAN_NUMBERS = ["受付Ⅰ", "受付Ⅱ", "受付Ⅲ", "受付Ⅳ", "受付Ⅴ", "受付Ⅵ", "受付Ⅶ", "受付Ⅷ", "受付Ⅸ", "受付Ⅹ"];
+// 全角数字の変換用配列
+const FULL_WIDTH_NUMBERS = ["受付１", "受付２", "受付３", "受付４", "受付５", "受付６", "受付７", "受付８", "受付９", "受付１０"];
 
 // =====================
 // 日本時間取得
@@ -191,7 +191,7 @@ function extractTicketItems(html) {
             prefCounts[pref] = (prefCounts[pref] || 0) + 1;
             let index = prefCounts[pref];
             
-            let romanSymbol = ROMAN_NUMBERS[index - 1] || `受付${index}`;
+            let fullWidthSymbol = FULL_WIDTH_NUMBERS[index - 1] || `受付${index}`;
 
             let id = `${pref}_${index}${isReopen ? "_reopen" : ""}`;
 
@@ -199,7 +199,7 @@ function extractTicketItems(html) {
                 id: id,
                 pref: pref,
                 prefIndex: index,
-                labelText: romanSymbol, // 「受付Ⅰ」「受付Ⅱ」など
+                labelText: fullWidthSymbol, // 「受付１」「受付２」など
                 status: status,
                 isReopen: isReopen
             });
@@ -248,7 +248,7 @@ async function monitorOnce() {
         return;
     }
 
-    // GitHubのアクション実行ログ出力（ローマ数字表記）
+    // GitHubのアクション実行ログ出力（全角数字表記）
     console.log("--- 【GitHub実行ログ：現在の全監視受付一覧】 ---");
     currentItems.forEach(item => {
         console.log(`[${item.pref}] ${item.labelText}| ステータス: ${item.status}`);
