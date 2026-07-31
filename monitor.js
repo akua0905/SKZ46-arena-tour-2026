@@ -1,5 +1,5 @@
 // =====================
-// monitor.js (動的タイトル・削除通知・終了時間繰り上げ版)
+// monitor.js (ローマ数字ナンバリング & 通知表記対応版)
 // =====================
 
 import fs from "fs";
@@ -13,8 +13,8 @@ const TARGET_URL = "https://l-tike.com/concert/mevent/?mid=366800";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const DATA_FILE = "ticket_list_data.json";
 
-// 丸数字の変換用配列
-const CIRCLED_NUMBERS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑯"];
+// ローマ数字の変換用配列
+const ROMAN_NUMBERS = ["受付Ⅰ", "受付Ⅱ", "受付Ⅲ", "受付Ⅳ", "受付Ⅴ", "受付Ⅵ", "受付Ⅶ", "受付Ⅷ", "受付Ⅸ", "受付Ⅹ"];
 
 // =====================
 // 日本時間取得
@@ -133,7 +133,7 @@ function extractTicketItems(html) {
         .filter(line => line.length > 0);
 
     const prefs = ["北海道", "宮城県", "愛知県", "福岡県", "神奈川県", "大阪府", "徳島県", "千葉県", "埼玉県", "兵庫県", "広島県", "香川県", "石川県", "新潟県", "愛媛県"];
-    const statuses = ["予定枚数終了", "発売中", "受付中", "販売中", "受付終了", "発売前", "受付前", "販売再開"];
+    const statuses = ["予定枚数終了", "発売中", "受付中", "販売中", "受付終了", "発売前", "受付前", "販売再開", "本日発売"];
 
     const dateRegex = /^\d{1,2}\.\d{1,2}$/;
     
@@ -191,8 +191,7 @@ function extractTicketItems(html) {
             prefCounts[pref] = (prefCounts[pref] || 0) + 1;
             let index = prefCounts[pref];
             
-            let dateStr = dates.join(" ").replace(/\s+・\s+/g, " ・ ").trim();
-            if (!dateStr) dateStr = "全日程";
+            let romanSymbol = ROMAN_NUMBERS[index - 1] || `受付${index}`;
 
             let id = `${pref}_${index}${isReopen ? "_reopen" : ""}`;
 
@@ -200,7 +199,7 @@ function extractTicketItems(html) {
                 id: id,
                 pref: pref,
                 prefIndex: index,
-                dateStr: dateStr,
+                labelText: romanSymbol, // 「受付Ⅰ」「受付Ⅱ」など
                 status: status,
                 isReopen: isReopen
             });
@@ -249,11 +248,10 @@ async function monitorOnce() {
         return;
     }
 
-    // GitHubのアクション実行ログ出力
+    // GitHubのアクション実行ログ出力（ローマ数字表記）
     console.log("--- 【GitHub実行ログ：現在の全監視受付一覧】 ---");
     currentItems.forEach(item => {
-        let numSymbol = CIRCLED_NUMBERS[item.prefIndex - 1] || `(${item.prefIndex})`;
-        console.log(`[${item.pref}] ${numSymbol}| ステータス: ${item.status}`);
+        console.log(`[${item.pref}] ${item.labelText}| ステータス: ${item.status}`);
     });
     console.log("-----------------------------------------------");
 
@@ -288,7 +286,7 @@ async function monitorOnce() {
         let old = oldMap.get(current.id);
         if (old) {
             if (old.status !== current.status) {
-                diffBlocks.push(`☆${current.pref}☆\n${current.dateStr}\n\n${old.status}\n↓\n${current.status}`);
+                diffBlocks.push(`☆${current.pref}☆\n${current.labelText}\n\n${old.status}\n↓\n${current.status}`);
                 changedPrefs.add(current.pref.replace("県", "").replace("府", "").replace("都", "").replace("道", ""));
             }
         }
@@ -300,7 +298,7 @@ async function monitorOnce() {
 
     for (let old of oldItems) {
         if (!currentMap.has(old.id)) {
-            deletedBlocks.push(`☆${old.pref}☆\n${old.dateStr}\n\nステータス: ${old.status}（受付枠削除）`);
+            deletedBlocks.push(`☆${old.pref}☆\n${old.labelText}\n\nステータス: ${old.status}（受付枠削除）`);
             deletedPrefs.add(old.pref.replace("県", "").replace("府", "").replace("都", "").replace("道", ""));
         }
     }
@@ -353,25 +351,35 @@ function getNextCheckTime() {
 }
 
 // =====================
-// メインループ（5時間50分運用：GitHub上限回避・隙間ゼロ対応）
+// メインループ（ギリギリまで監視を粘る修正版）
 // =====================
 
 async function mainLoop() {
-    const END_TIME_MS = 21000000; // 5時間50分 (6時間上限を回避しつつ、次の起動まで粘る)
+    const END_TIME_MS = 21000000; // 5時間50分
     const startTime = Date.now();
     const endTime = startTime + END_TIME_MS;
 
     console.log("一覧監視開始:", nowJP());
 
     while (true) {
-        if (Date.now() >= endTime) break;
+        const now = Date.now();
+        if (now >= endTime) break;
 
         await monitorOnce();
 
         const next = getNextCheckTime();
-        const wait = next.getTime() - Date.now();
+        let wait = next.getTime() - Date.now();
 
-        if (Date.now() + wait >= endTime) break;
+        // 次の5分間隔が終了時刻を超えている場合でも、終了直前（終了10秒前）に最後のチェックを行う
+        if (Date.now() + wait >= endTime) {
+            const finalWait = endTime - Date.now() - 10000; // 終了10秒前まで待機
+            if (finalWait > 10000) { // 残り時間が10秒以上あれば最後の悪あがき実行
+                console.log(`終了直前の最終確認を実行します (${Math.floor(finalWait / 1000)}秒後)`);
+                await sleep(finalWait);
+                await monitorOnce();
+            }
+            break; // 最終チェック後にループ終了
+        }
 
         console.log(`次回確認: ${next.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`);
         if (wait > 0) await sleep(wait);
