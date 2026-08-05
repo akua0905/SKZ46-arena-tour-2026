@@ -3,23 +3,31 @@
     "id": "広島県_1",
     "pref": "広島県",
     "prefIndex": 1,
-    "dateStr": "全日程",
+    "labelText": "受付１",
     "status": "受付終了",
+    "isReopen": false
+  },
+  {
+    "id": "広島県_2",
+    "pref": "広島県",
+    "prefIndex": 2,
+    "labelText": "受付２",
+    "status": "予定枚数終了",
     "isReopen": false
   },
   {
     "id": "千葉県_1",
     "pref": "千葉県",
     "prefIndex": 1,
-    "dateStr": "全日程",
-    "status": "予定枚数終了",
+    "labelText": "受付１",
+    "status": "受付終了",
     "isReopen": false
   },
   {
     "id": "千葉県_2",
     "pref": "千葉県",
     "prefIndex": 2,
-    "dateStr": "全日程",
+    "labelText": "受付２",
     "status": "発売前",
     "isReopen": false
   },
@@ -27,7 +35,7 @@
     "id": "宮城県_1",
     "pref": "宮城県",
     "prefIndex": 1,
-    "dateStr": "全日程",
+    "labelText": "受付１",
     "status": "発売中",
     "isReopen": false
   },
@@ -35,7 +43,7 @@
     "id": "宮城県_2",
     "pref": "宮城県",
     "prefIndex": 2,
-    "dateStr": "全日程",
+    "labelText": "受付２",
     "status": "発売前",
     "isReopen": false
   },
@@ -43,7 +51,7 @@
     "id": "香川県_1",
     "pref": "香川県",
     "prefIndex": 1,
-    "dateStr": "全日程",
+    "labelText": "受付１",
     "status": "予定枚数終了",
     "isReopen": false
   },
@@ -51,7 +59,7 @@
     "id": "香川県_2",
     "pref": "香川県",
     "prefIndex": 2,
-    "dateStr": "全日程",
+    "labelText": "受付２",
     "status": "発売前",
     "isReopen": false
   }
