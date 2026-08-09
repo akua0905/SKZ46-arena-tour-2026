@@ -1,13 +1,5 @@
 [
   {
-    "id": "広島県_1",
-    "pref": "広島県",
-    "prefIndex": 1,
-    "labelText": "受付１",
-    "status": "受付終了",
-    "isReopen": false
-  },
-  {
     "id": "千葉県_1",
     "pref": "千葉県",
     "prefIndex": 1,
