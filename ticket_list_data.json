@@ -8,14 +8,6 @@
     "isReopen": false
   },
   {
-    "id": "広島県_2",
-    "pref": "広島県",
-    "prefIndex": 2,
-    "labelText": "受付２",
-    "status": "予定枚数終了",
-    "isReopen": false
-  },
-  {
     "id": "千葉県_1",
     "pref": "千葉県",
     "prefIndex": 1,
@@ -61,6 +53,14 @@
     "prefIndex": 2,
     "labelText": "受付２",
     "status": "発売前",
+    "isReopen": false
+  },
+  {
+    "id": "香川県_3",
+    "pref": "香川県",
+    "prefIndex": 3,
+    "labelText": "受付３",
+    "status": "予定枚数終了",
     "isReopen": false
   }
 ]
