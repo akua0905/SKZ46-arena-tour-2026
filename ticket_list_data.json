@@ -20,7 +20,7 @@
     "pref": "香川県",
     "prefIndex": 1,
     "labelText": "受付１",
-    "status": "予定枚数終了",
+    "status": "受付終了",
     "isReopen": false
   },
   {
@@ -29,14 +29,6 @@
     "prefIndex": 2,
     "labelText": "受付２",
     "status": "発売前",
-    "isReopen": false
-  },
-  {
-    "id": "香川県_3",
-    "pref": "香川県",
-    "prefIndex": 3,
-    "labelText": "受付３",
-    "status": "予定枚数終了",
     "isReopen": false
   }
 ]
