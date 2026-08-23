@@ -1,13 +1,5 @@
 [
   {
-    "id": "宮城県_1",
-    "pref": "宮城県",
-    "prefIndex": 1,
-    "labelText": "受付１",
-    "status": "受付終了",
-    "isReopen": false
-  },
-  {
     "id": "香川県_1",
     "pref": "香川県",
     "prefIndex": 1,
