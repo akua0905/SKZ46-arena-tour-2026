@@ -6,13 +6,5 @@
     "labelText": "受付１",
     "status": "受付終了",
     "isReopen": false
-  },
-  {
-    "id": "香川県_2",
-    "pref": "香川県",
-    "prefIndex": 2,
-    "labelText": "受付２",
-    "status": "予定枚数終了",
-    "isReopen": false
   }
 ]
