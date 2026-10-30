@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "千葉県_1",
+    "pref": "千葉県",
+    "prefIndex": 1,
+    "labelText": "受付１",
+    "status": "発売前",
+    "isReopen": false
+  }
+]
