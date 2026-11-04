@@ -4,7 +4,15 @@
     "pref": "千葉県",
     "prefIndex": 1,
     "labelText": "受付１",
-    "status": "予定枚数終了",
+    "status": "受付終了",
+    "isReopen": false
+  },
+  {
+    "id": "千葉県_2",
+    "pref": "千葉県",
+    "prefIndex": 2,
+    "labelText": "受付２",
+    "status": "発売前",
     "isReopen": false
   }
 ]
